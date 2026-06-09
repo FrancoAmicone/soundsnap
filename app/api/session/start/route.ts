@@ -260,7 +260,7 @@ export async function POST(request: NextRequest) {
   const admin = createServiceClient()
 
   // -----------------------------------------------------------------------
-  // BRANCH A: Ephemeral "play by artist" session
+  // BRANCH A: "Play by artist" — find or create a persistent challenge
   // -----------------------------------------------------------------------
   if ('artistId' in body && body.artistId) {
     const { artistId, artistName } = body as { artistId: string; artistName: string; difficulty: Difficulty }
@@ -276,15 +276,72 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const requestedCount = DEFAULT_QUESTION_COUNT[diff]
+    // ── Find or create the challenge row for this artist ──────────────
+    const { data: existingRow } = await admin
+      .from('challenges')
+      .select(
+        'id, is_active, is_guest_allowed, challenge_type, ' +
+          'deezer_playlist_id, deezer_artist_id, pinned_tracks, excluded_track_ids, ' +
+          'track_count_easy, track_count_medium, track_count_hard',
+      )
+      .eq('deezer_artist_id', artistId)
+      .eq('challenge_type', 'artist')
+      .eq('is_active', true)
+      .maybeSingle()
+
+    let challenge: ChallengeRow
+
+    if (existingRow) {
+      challenge = existingRow as unknown as ChallengeRow
+    } else {
+      // Auto-create: fetch artist cover from Deezer
+      let coverUrl: string | null = null
+      try {
+        const res = await fetch(`https://api.deezer.com/artist/${artistId}`)
+        const data = (await res.json()) as { picture_big?: string }
+        coverUrl = data.picture_big ?? null
+      } catch {
+        // Non-fatal: continue without a cover image
+      }
+
+      const { data: newRow, error: createErr } = await admin
+        .from('challenges')
+        .insert({
+          title: artistName,
+          challenge_type: 'artist',
+          deezer_artist_id: artistId,
+          cover_image_url: coverUrl,
+          is_guest_allowed: true,
+          is_active: true,
+          track_count_easy: 5,
+          track_count_medium: 7,
+          track_count_hard: 10,
+        })
+        .select(
+          'id, is_active, is_guest_allowed, challenge_type, ' +
+            'deezer_playlist_id, deezer_artist_id, pinned_tracks, excluded_track_ids, ' +
+            'track_count_easy, track_count_medium, track_count_hard',
+        )
+        .single()
+
+      if (createErr || !newRow) {
+        console.error('[session/start] auto-create challenge failed', createErr)
+        return jsonError('Failed to create artist challenge', 500, 'challenge_create_failed')
+      }
+      challenge = newRow as unknown as ChallengeRow
+    }
+
+    // ── Resolve tracks (same path as challenge-based sessions) ────────
+    const requestedCount =
+      (challenge[TRACK_COUNT_COLUMN[diff] as 'track_count_easy' | 'track_count_medium' | 'track_count_hard'] as number | null) ??
+      DEFAULT_QUESTION_COUNT[diff]
     const fetchLimit = Math.min(Math.max(requestedCount * 2, requestedCount + 10, 30), 100)
 
     let tracks: DeezerTrack[]
     try {
-      const result = await getArtistTracks(artistId, fetchLimit)
-      tracks = result.tracks
+      tracks = await resolveChallengeTracks(challenge, fetchLimit)
     } catch (err) {
-      console.error('[session/start] ephemeral artist fetch failed', err)
+      console.error('[session/start] artist track fetch failed', err)
       return jsonError(
         'Could not reach the music provider. Try again in a moment.',
         502,
@@ -310,7 +367,7 @@ export async function POST(request: NextRequest) {
     const { data: session, error: insertErr } = await admin
       .from('game_sessions')
       .insert({
-        challenge_id: null,
+        challenge_id: challenge.id,
         user_id: userId,
         difficulty: diff,
         total_questions: serverTracks.length,
@@ -322,7 +379,7 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (insertErr || !session) {
-      console.error('[session/start] ephemeral insert failed', insertErr)
+      console.error('[session/start] artist session insert failed', insertErr)
       return jsonError('Failed to start session', 500, 'session_insert_failed')
     }
 
