@@ -71,6 +71,24 @@ function shuffle<T>(arr: T[]): T[] {
 }
 
 /**
+ * Deduplicate a track array by id, preserving first-occurrence order.
+ * Defense-in-depth: the Edge Function already deduplicates, but Deezer
+ * can return the same id across pages or when pinned tracks overlap with
+ * the base pool after a playlist edit.
+ */
+function deduplicateById(tracks: DeezerTrack[]): DeezerTrack[] {
+  const seen = new Set<string>()
+  const result: DeezerTrack[] = []
+  for (const t of tracks) {
+    if (!seen.has(t.id)) {
+      seen.add(t.id)
+      result.push(t)
+    }
+  }
+  return result
+}
+
+/**
  * Pick `count` distinct decoy titles from the pool, excluding the
  * track's own title. Deduplicates normalized titles so we don't show
  * "Song" and "Song - Remastered" as two distinct options.
@@ -153,7 +171,9 @@ function applyPinnedAndExclusions(
     }
   }
 
-  return merged.filter((t) => !excludeSet.has(t.id))
+  // Final dedup: Deezer can return the same id across pages, and
+  // pinned tracks could overlap with base after a playlist edit.
+  return deduplicateById(merged.filter((t) => !excludeSet.has(t.id)))
 }
 
 async function resolveChallengeTracks(
@@ -165,7 +185,7 @@ async function resolveChallengeTracks(
     // Still apply exclusions (admin could have removed some after creation).
     const pinned = challenge.pinned_tracks ?? []
     const excludeSet = new Set(challenge.excluded_track_ids ?? [])
-    return pinned.filter((t) => !excludeSet.has(t.id))
+    return deduplicateById(pinned.filter((t) => !excludeSet.has(t.id)))
   }
 
   if (challenge.challenge_type === 'artist') {

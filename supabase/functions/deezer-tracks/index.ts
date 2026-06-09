@@ -120,6 +120,19 @@ function toArtistResult(a: any): ArtistSearchResult | null {
   }
 }
 
+/** Deduplicate a track array by id, preserving first-occurrence order. */
+function deduplicateTracks(tracks: DeezerTrack[]): DeezerTrack[] {
+  const seen = new Set<string>()
+  const result: DeezerTrack[] = []
+  for (const t of tracks) {
+    if (!seen.has(t.id)) {
+      seen.add(t.id)
+      result.push(t)
+    }
+  }
+  return result
+}
+
 async function fetchPlaylistTracks(
   playlistId: string,
   limit: number,
@@ -139,11 +152,12 @@ async function fetchPlaylistTracks(
     throw new Error(`Deezer API error: ${JSON.stringify(data.error)}`)
   }
   const items = Array.isArray(data.data) ? data.data : []
-  const tracks: DeezerTrack[] = []
+  const raw: DeezerTrack[] = []
   for (const item of items) {
     const mapped = toDeezerTrack(item)
-    if (mapped) tracks.push(mapped)
+    if (mapped) raw.push(mapped)
   }
+  const tracks = deduplicateTracks(raw)
   return { tracks, fetched: items.length }
 }
 
@@ -166,11 +180,12 @@ async function fetchArtistTracks(
     throw new Error(`Deezer API error: ${JSON.stringify(data.error)}`)
   }
   const items = Array.isArray(data.data) ? data.data : []
-  const tracks: DeezerTrack[] = []
+  const raw: DeezerTrack[] = []
   for (const item of items) {
     const mapped = toDeezerTrack(item)
-    if (mapped) tracks.push(mapped)
+    if (mapped) raw.push(mapped)
   }
+  const tracks = deduplicateTracks(raw)
   return { tracks, fetched: items.length }
 }
 
