@@ -11,7 +11,14 @@
 // a shared `x-internal-secret` header (see EDGE_FUNCTION_SECRET).
 // =====================================================================
 
-import type { DeezerTrack, GetPlaylistTracksResponse } from '@/types'
+import type {
+  ArtistSearchResult,
+  DeezerTrack,
+  GetArtistTracksResponse,
+  GetPlaylistTracksResponse,
+  SearchArtistsResponse,
+  SearchTracksResponse,
+} from '@/types'
 
 const FUNCTION_NAME = 'deezer-tracks'
 
@@ -44,8 +51,6 @@ async function invokeDeezerTracks<T>(body: unknown): Promise<T> {
       'x-internal-secret': secret,
     },
     body: JSON.stringify(body),
-    // Edge Function responses are tiny — no point caching at the
-    // Next.js fetch layer.
     cache: 'no-store',
   })
   if (!res.ok) {
@@ -61,9 +66,44 @@ export interface PlaylistTracksResult {
   withPreview: number
 }
 
+/** Fetch tracks from a Deezer public playlist. */
 export function getPlaylistTracks(
   playlistId: string,
   limit = 50,
 ): Promise<PlaylistTracksResult> {
   return invokeDeezerTracks<GetPlaylistTracksResponse>({ playlistId, limit })
+}
+
+/** Fetch top tracks for a Deezer artist. */
+export function getArtistTracks(
+  artistId: string,
+  limit = 50,
+): Promise<PlaylistTracksResult> {
+  return invokeDeezerTracks<GetArtistTracksResponse>({ artistId, limit })
+}
+
+/** Search Deezer for tracks matching a query. Used in admin track builder. */
+export async function searchTracks(
+  query: string,
+  limit = 20,
+): Promise<DeezerTrack[]> {
+  const res = await invokeDeezerTracks<SearchTracksResponse>({
+    searchQuery: query,
+    searchType: 'track',
+    limit,
+  })
+  return res.tracks
+}
+
+/** Search Deezer for artists matching a query. Used in artist search UI. */
+export async function searchArtists(
+  query: string,
+  limit = 10,
+): Promise<ArtistSearchResult[]> {
+  const res = await invokeDeezerTracks<SearchArtistsResponse>({
+    searchQuery: query,
+    searchType: 'artist',
+    limit,
+  })
+  return res.artists
 }

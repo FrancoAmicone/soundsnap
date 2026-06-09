@@ -5,16 +5,27 @@
 // `preview` MP3 for almost every track (Spotify deprecated theirs), and
 // requires NO API key / OAuth for read endpoints.
 //
-// Contract (POST):
-//   Request body : { playlistId: string, limit?: number }   limit ≤ 100
-//   Response 200 : {
-//     tracks: DeezerTrack[],
-//     fetched: number,        // raw items returned by Deezer
-//     withPreview: number     // tracks kept after filter (== tracks.length)
-//   }
+// Contract (POST) — dispatch on the first matching field in the body:
+//
+//   { playlistId, limit? }
+//     → GET /playlist/{id}/tracks
+//     → { tracks: DeezerTrack[], fetched: number, withPreview: number }
+//
+//   { artistId, limit? }
+//     → GET /artist/{id}/top
+//     → { tracks: DeezerTrack[], fetched: number, withPreview: number }
+//
+//   { searchQuery, searchType: 'track' | 'artist', limit? }
+//     searchType='track'  → GET /search?q={q}
+//       → { tracks: DeezerTrack[] }
+//     searchType='artist' → GET /search/artist?q={q}
+//       → { artists: ArtistSearchResult[] }
 //
 // DeezerTrack:
 //   { id, name, artist, albumName, previewUrl, coverUrl }
+//
+// ArtistSearchResult:
+//   { id, name, picture, nbFan }
 //
 // Required env (set in Supabase Function secrets):
 //   - EDGE_FUNCTION_SECRET   (shared with the Next.js API routes)
@@ -24,9 +35,6 @@
 // we authenticate callers with a shared `x-internal-secret` header.
 // Since this function only ever runs from our own server-side API
 // routes, that is sufficient and also blocks random public invocations.
-//
-// Note: Deezer's API is CORS-restricted for browsers, but that does not
-// affect us — this Edge Function calls it server-to-server.
 // =====================================================================
 
 // deno-lint-ignore-file no-explicit-any
@@ -41,10 +49,30 @@ interface DeezerTrack {
   coverUrl: string | null
 }
 
+interface ArtistSearchResult {
+  id: string
+  name: string
+  picture: string | null
+  nbFan: number
+}
+
 interface PlaylistRequest {
   playlistId: string
   limit?: number
 }
+
+interface ArtistRequest {
+  artistId: string
+  limit?: number
+}
+
+interface SearchRequest {
+  searchQuery: string
+  searchType: 'track' | 'artist'
+  limit?: number
+}
+
+type RequestBody = PlaylistRequest | ArtistRequest | SearchRequest
 
 const EDGE_FUNCTION_SECRET = Deno.env.get('EDGE_FUNCTION_SECRET')
 
@@ -77,6 +105,21 @@ function toDeezerTrack(t: any): DeezerTrack | null {
   }
 }
 
+/**
+ * Map a raw Deezer artist search result to SoundSnap's shape.
+ */
+function toArtistResult(a: any): ArtistSearchResult | null {
+  if (!a) return null
+  const id = a.id != null ? String(a.id) : ''
+  if (!id) return null
+  return {
+    id,
+    name: a.name ?? '',
+    picture: a.picture_medium ?? a.picture ?? null,
+    nbFan: typeof a.nb_fan === 'number' ? a.nb_fan : 0,
+  }
+}
+
 async function fetchPlaylistTracks(
   playlistId: string,
   limit: number,
@@ -92,7 +135,6 @@ async function fetchPlaylistTracks(
     throw new Error(`Deezer playlist fetch failed: ${res.status} ${text}`)
   }
   const data = (await res.json()) as { data?: any[]; error?: any }
-  // Deezer returns 200 with an `error` object for invalid/private playlists.
   if (data.error) {
     throw new Error(`Deezer API error: ${JSON.stringify(data.error)}`)
   }
@@ -103,6 +145,85 @@ async function fetchPlaylistTracks(
     if (mapped) tracks.push(mapped)
   }
   return { tracks, fetched: items.length }
+}
+
+async function fetchArtistTracks(
+  artistId: string,
+  limit: number,
+): Promise<{ tracks: DeezerTrack[]; fetched: number }> {
+  const safeLimit = Math.max(1, Math.min(limit, 100))
+  const url =
+    `https://api.deezer.com/artist/${encodeURIComponent(artistId)}` +
+    `/top?limit=${safeLimit}`
+
+  const res = await fetch(url, { headers: { accept: 'application/json' } })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(`Deezer artist fetch failed: ${res.status} ${text}`)
+  }
+  const data = (await res.json()) as { data?: any[]; error?: any; total?: number }
+  if (data.error) {
+    throw new Error(`Deezer API error: ${JSON.stringify(data.error)}`)
+  }
+  const items = Array.isArray(data.data) ? data.data : []
+  const tracks: DeezerTrack[] = []
+  for (const item of items) {
+    const mapped = toDeezerTrack(item)
+    if (mapped) tracks.push(mapped)
+  }
+  return { tracks, fetched: items.length }
+}
+
+async function searchTracks(
+  query: string,
+  limit: number,
+): Promise<DeezerTrack[]> {
+  const safeLimit = Math.max(1, Math.min(limit, 50))
+  const url =
+    `https://api.deezer.com/search?q=${encodeURIComponent(query)}&limit=${safeLimit}`
+
+  const res = await fetch(url, { headers: { accept: 'application/json' } })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(`Deezer track search failed: ${res.status} ${text}`)
+  }
+  const data = (await res.json()) as { data?: any[]; error?: any }
+  if (data.error) {
+    throw new Error(`Deezer API error: ${JSON.stringify(data.error)}`)
+  }
+  const items = Array.isArray(data.data) ? data.data : []
+  const tracks: DeezerTrack[] = []
+  for (const item of items) {
+    const mapped = toDeezerTrack(item)
+    if (mapped) tracks.push(mapped)
+  }
+  return tracks
+}
+
+async function searchArtists(
+  query: string,
+  limit: number,
+): Promise<ArtistSearchResult[]> {
+  const safeLimit = Math.max(1, Math.min(limit, 20))
+  const url =
+    `https://api.deezer.com/search/artist?q=${encodeURIComponent(query)}&limit=${safeLimit}`
+
+  const res = await fetch(url, { headers: { accept: 'application/json' } })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(`Deezer artist search failed: ${res.status} ${text}`)
+  }
+  const data = (await res.json()) as { data?: any[]; error?: any }
+  if (data.error) {
+    throw new Error(`Deezer API error: ${JSON.stringify(data.error)}`)
+  }
+  const items = Array.isArray(data.data) ? data.data : []
+  const artists: ArtistSearchResult[] = []
+  for (const item of items) {
+    const mapped = toArtistResult(item)
+    if (mapped) artists.push(mapped)
+  }
+  return artists
 }
 
 /**
@@ -138,24 +259,64 @@ Deno.serve(async (req: Request) => {
     return json({ error: 'invalid_json' }, 400)
   }
 
-  if (!body || typeof body !== 'object' || !('playlistId' in body)) {
-    return json(
-      { error: 'invalid_body', hint: 'Expected { playlistId, limit? }' },
-      400,
-    )
+  if (!body || typeof body !== 'object') {
+    return json({ error: 'invalid_body' }, 400)
   }
 
-  const { playlistId, limit } = body as PlaylistRequest
-  if (typeof playlistId !== 'string' || playlistId.length === 0) {
-    return json({ error: 'playlistId_required' }, 400)
-  }
+  const b = body as Record<string, unknown>
 
   try {
-    const { tracks, fetched } = await fetchPlaylistTracks(
-      playlistId,
-      typeof limit === 'number' ? limit : 50,
+    // --- Playlist tracks ---
+    if ('playlistId' in b) {
+      const { playlistId, limit } = b as PlaylistRequest
+      if (typeof playlistId !== 'string' || playlistId.length === 0) {
+        return json({ error: 'playlistId_required' }, 400)
+      }
+      const { tracks, fetched } = await fetchPlaylistTracks(
+        playlistId,
+        typeof limit === 'number' ? limit : 50,
+      )
+      return json({ tracks, fetched, withPreview: tracks.length })
+    }
+
+    // --- Artist top tracks ---
+    if ('artistId' in b) {
+      const { artistId, limit } = b as ArtistRequest
+      if (typeof artistId !== 'string' || artistId.length === 0) {
+        return json({ error: 'artistId_required' }, 400)
+      }
+      const { tracks, fetched } = await fetchArtistTracks(
+        artistId,
+        typeof limit === 'number' ? limit : 50,
+      )
+      return json({ tracks, fetched, withPreview: tracks.length })
+    }
+
+    // --- Search (tracks or artists) ---
+    if ('searchQuery' in b) {
+      const { searchQuery, searchType, limit } = b as SearchRequest
+      if (typeof searchQuery !== 'string' || searchQuery.trim().length === 0) {
+        return json({ error: 'searchQuery_required' }, 400)
+      }
+      const safeLimit = typeof limit === 'number' ? limit : 20
+
+      if (searchType === 'artist') {
+        const artists = await searchArtists(searchQuery.trim(), safeLimit)
+        return json({ artists })
+      }
+
+      // Default: track search
+      const tracks = await searchTracks(searchQuery.trim(), safeLimit)
+      return json({ tracks })
+    }
+
+    return json(
+      {
+        error: 'invalid_body',
+        hint: 'Expected one of: { playlistId }, { artistId }, { searchQuery, searchType }',
+      },
+      400,
     )
-    return json({ tracks, fetched, withPreview: tracks.length })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'unknown_error'
     console.error('[deezer-tracks]', message)
