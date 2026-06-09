@@ -38,8 +38,6 @@ export default function ArtistSearch({ isGuest = false }: ArtistSearchProps) {
   const [error, setError] = useState<string | null>(null)
   const [selectedArtist, setSelectedArtist] = useState<ArtistSearchResult | null>(null)
   const [difficulty, setDifficulty] = useState<Difficulty>('easy')
-  const [starting, setStarting] = useState(false)
-  const [startError, setStartError] = useState<string | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -72,43 +70,23 @@ export default function ArtistSearch({ isGuest = false }: ArtistSearchProps) {
     setSelectedArtist(artist)
     setResults([])
     setQuery(artist.name)
-    setStartError(null)
   }
 
   function handleClear() {
     setSelectedArtist(null)
     setQuery('')
     setResults([])
-    setStartError(null)
     setTimeout(() => inputRef.current?.focus(), 50)
   }
 
-  async function handlePlay() {
+  function handlePlay() {
     if (!selectedArtist) return
-    setStarting(true)
-    setStartError(null)
-    try {
-      const res = await fetch('/api/session/start', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          artistId: selectedArtist.id,
-          artistName: selectedArtist.name,
-          difficulty,
-        }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        throw new Error(data.error ?? `HTTP ${res.status}`)
-      }
-      // Redirect to the game play page (ephemeral: no challengeId in URL)
-      router.push(`/play?session=${data.sessionId}&difficulty=${difficulty}&artist=${encodeURIComponent(selectedArtist.name)}`)
-    } catch (err) {
-      setStartError(
-        err instanceof Error ? err.message : 'No se pudo iniciar la partida.',
-      )
-      setStarting(false)
-    }
+    // Navigate to the play page — GameSession will create the session on mount
+    router.push(
+      `/play?artistId=${encodeURIComponent(selectedArtist.id)}` +
+        `&artistName=${encodeURIComponent(selectedArtist.name)}` +
+        `&difficulty=${difficulty}`,
+    )
   }
 
   return (
@@ -246,17 +224,12 @@ export default function ArtistSearch({ isGuest = false }: ArtistSearchProps) {
             })}
           </div>
 
-          {startError && (
-            <p className="text-sm text-red-400">{startError}</p>
-          )}
-
           <button
             type="button"
             onClick={handlePlay}
-            disabled={starting}
-            className="w-full rounded-lg bg-indigo-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+            className="w-full rounded-lg bg-indigo-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-500"
           >
-            {starting ? 'Iniciando…' : `Jugar con ${selectedArtist.name}`}
+            {`Jugar con ${selectedArtist.name}`}
           </button>
         </div>
       )}

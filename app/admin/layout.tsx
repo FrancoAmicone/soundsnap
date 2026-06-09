@@ -6,7 +6,7 @@
 // =====================================================================
 
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/server'
+import UserMenu from '@/components/ui/UserMenu'
 
 export const metadata = {
   title: 'Admin — SoundSnap',
@@ -17,19 +17,6 @@ export default async function AdminLayout({
 }: {
   children: React.ReactNode
 }) {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  const { data: profile } = user
-    ? await supabase
-        .from('profiles')
-        .select('username, avatar_url')
-        .eq('id', user.id)
-        .single()
-    : { data: null }
-
   return (
     <div className="min-h-screen bg-black text-white">
       {/* ---------------------------------------------------------------- */}
@@ -61,25 +48,14 @@ export default async function AdminLayout({
             </nav>
           </div>
 
-          <div className="flex items-center gap-3">
-            {profile?.avatar_url ? (
-              <img
-                src={profile.avatar_url}
-                alt={profile.username ?? ''}
-                className="h-7 w-7 rounded-full object-cover ring-1 ring-white/10"
-              />
-            ) : (
-              <div className="h-7 w-7 rounded-full bg-indigo-600/40" />
-            )}
-            <span className="text-sm text-white/50">
-              {profile?.username ?? user?.email}
-            </span>
+          <div className="flex items-center gap-4">
             <Link
               href="/"
               className="text-xs text-white/30 transition-colors hover:text-white/60"
             >
               ← Home
             </Link>
+            <UserMenu />
           </div>
         </div>
       </header>
