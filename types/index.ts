@@ -9,6 +9,9 @@
 
 export type Difficulty = 'easy' | 'intermediate' | 'hard'
 
+/** Source type for a challenge's track pool. */
+export type ChallengeType = 'playlist' | 'manual' | 'artist'
+
 // ---------------------------------------------------------------------
 // Deezer / Edge Function shapes
 // ---------------------------------------------------------------------
@@ -37,6 +40,29 @@ export interface GetPlaylistTracksResponse {
   fetched: number
   /** Tracks kept after filtering empty previews. */
   withPreview: number
+}
+
+export interface GetArtistTracksResponse {
+  tracks: DeezerTrack[]
+  fetched: number
+  withPreview: number
+}
+
+export interface SearchTracksResponse {
+  tracks: DeezerTrack[]
+}
+
+/** Returned by the Edge Function when searchType = 'artist'. */
+export interface ArtistSearchResult {
+  id: string
+  name: string
+  /** Deezer picture_medium URL */
+  picture: string | null
+  nbFan: number
+}
+
+export interface SearchArtistsResponse {
+  artists: ArtistSearchResult[]
 }
 
 // ---------------------------------------------------------------------
@@ -95,10 +121,14 @@ export interface ClientTrack {
 // /api/session/start
 // ---------------------------------------------------------------------
 
-export interface SessionStartRequest {
-  challengeId: string
-  difficulty: Difficulty
-}
+/**
+ * Two variants:
+ *   - challengeId: play a pre-created challenge (playlist/manual/artist type)
+ *   - artistId:    ephemeral "play by artist" session (no challenge row needed)
+ */
+export type SessionStartRequest =
+  | { challengeId: string; difficulty: Difficulty }
+  | { artistId: string; artistName: string; difficulty: Difficulty }
 
 export interface SessionStartResponse {
   sessionId: string
@@ -173,6 +203,8 @@ export interface SessionCompleteResponse {
   durationMs: number
   /** Whether the session was persisted (false for guests). */
   saved: boolean
+  /** Set when the session was an ephemeral artist play. */
+  artistName?: string
 }
 
 // ---------------------------------------------------------------------
