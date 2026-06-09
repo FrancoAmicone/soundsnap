@@ -435,6 +435,16 @@ export default function GameSession({
             knownArtist={knownArtist}
           />
         )}
+
+        {/* Skip button */}
+        <button
+          type="button"
+          onClick={handleTimeout}
+          disabled={submitting}
+          className="text-xs text-white/20 transition-colors hover:text-white/50 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Saltar canción →
+        </button>
       </div>
     )
   }

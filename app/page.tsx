@@ -32,7 +32,8 @@ export default async function HomePage() {
   } = await supabase.auth.getUser()
   const isGuest = !user
 
-  // Load active challenges + play counts in parallel
+  // Load active challenges + completed-session counts in parallel.
+  // game_sessions uses completed_at IS NOT NULL (no status column).
   const service = createServiceClient()
   const [{ data: challenges }, { data: playCounts }] = await Promise.all([
     service
@@ -43,13 +44,16 @@ export default async function HomePage() {
     service
       .from('game_sessions')
       .select('challenge_id')
-      .eq('status', 'completed'),
+      .not('completed_at', 'is', null)
+      .not('challenge_id', 'is', null),
   ])
 
-  // Build a map of challenge_id → session count
+  // Build a map of challenge_id → completed session count
   const countMap: Record<string, number> = {}
   for (const row of playCounts ?? []) {
-    countMap[row.challenge_id] = (countMap[row.challenge_id] ?? 0) + 1
+    if (row.challenge_id) {
+      countMap[row.challenge_id] = (countMap[row.challenge_id] ?? 0) + 1
+    }
   }
 
   const rows = ((challenges ?? []) as Challenge[]).map((c) => ({
