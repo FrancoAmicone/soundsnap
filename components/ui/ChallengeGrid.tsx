@@ -194,44 +194,52 @@ export default function ChallengeGrid({ challenges, isGuest = false }: Challenge
       </div>
 
       {/* ── Filter bar ──────────────────────────────────────────────── */}
-      <div className="mb-6 flex flex-wrap items-center gap-2">
-        {(['all', 'artist', 'playlist'] as FilterType[]).map((t) => (
-          <button
-            key={t}
-            onClick={() => setTypeFilter(t)}
-            className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
-              typeFilter === t ? 'bg-indigo-500 text-white' : 'bg-white/8 text-white/50 hover:bg-white/12'
-            }`}
-          >
-            {TYPE_LABELS[t]}
-          </button>
-        ))}
+      <div className="mb-6 space-y-2">
+        {/* Row 1: type pills + sort pills always on the same line */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {(['all', 'artist', 'playlist'] as FilterType[]).map((t) => (
+              <button
+                key={t}
+                onClick={() => setTypeFilter(t)}
+                className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+                  typeFilter === t ? 'bg-indigo-500 text-white' : 'bg-white/8 text-white/50 hover:bg-white/12'
+                }`}
+              >
+                {TYPE_LABELS[t]}
+              </button>
+            ))}
+          </div>
 
-        {genres.length > 0 && <span className="h-4 w-px bg-white/10" aria-hidden />}
+          <div className="flex shrink-0 items-center gap-1.5">
+            {(['recent', 'popular'] as SortKey[]).map((s) => (
+              <button
+                key={s}
+                onClick={() => setSortKey(s)}
+                className={`rounded-full px-3 py-1 text-xs font-semibold whitespace-nowrap transition-colors ${
+                  sortKey === s ? 'bg-white/15 text-white' : 'bg-white/5 text-white/40 hover:bg-white/10 hover:text-white/60'
+                }`}
+              >
+                {SORT_LABELS[s]}
+              </button>
+            ))}
+          </div>
+        </div>
 
-        {genres.map((g) => (
-          <button
-            key={g}
-            onClick={() => setGenreFilter(genreFilter === g ? null : g)}
-            className={`rounded-full px-3 py-1 text-xs font-semibold capitalize transition-colors ${genreColors(g, genreFilter === g)}`}
-          >
-            {g}
-          </button>
-        ))}
-
-        <span className="ml-auto flex items-center gap-1.5">
-          {(['recent', 'popular'] as SortKey[]).map((s) => (
-            <button
-              key={s}
-              onClick={() => setSortKey(s)}
-              className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
-                sortKey === s ? 'bg-white/15 text-white' : 'bg-white/5 text-white/40 hover:bg-white/10 hover:text-white/60'
-              }`}
-            >
-              {SORT_LABELS[s]}
-            </button>
-          ))}
-        </span>
+        {/* Row 2: genre pills (only if any) */}
+        {genres.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2">
+            {genres.map((g) => (
+              <button
+                key={g}
+                onClick={() => setGenreFilter(genreFilter === g ? null : g)}
+                className={`rounded-full px-3 py-1 text-xs font-semibold capitalize transition-colors ${genreColors(g, genreFilter === g)}`}
+              >
+                {g}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* ── Challenge grid ──────────────────────────────────────────── */}

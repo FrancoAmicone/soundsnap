@@ -76,17 +76,17 @@ export default async function HomePage() {
       </header>
 
       {/* ── Hero ───────────────────────────────────────────────────── */}
-      <section className="px-4 pb-14 pt-16 text-center">
-        <h1 className="text-4xl font-bold tracking-tight text-white sm:text-5xl">
+      <section className="px-4 pb-8 pt-10 text-center sm:pb-14 sm:pt-16">
+        <h1 className="text-3xl font-bold tracking-tight text-white sm:text-5xl">
           Sound<span className="text-indigo-400">Snap</span>
         </h1>
-        <p className="mt-3 text-base text-white/50 sm:text-lg">
+        <p className="mt-2 text-sm text-white/50 sm:mt-3 sm:text-lg">
           Escuchá 5 segundos. Adiviná la canción.
         </p>
       </section>
 
       {/* ── Challenge grid ─────────────────────────────────────────── */}
-      <section className="mx-auto max-w-5xl px-4 pb-20">
+      <section className="mx-auto max-w-5xl px-4 pb-12 sm:pb-20">
         <h2 className="mb-6 text-lg font-semibold text-white/70">
           Challenges disponibles
         </h2>

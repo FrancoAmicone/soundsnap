@@ -53,7 +53,7 @@ export default function ScoreFeedback({
   }, [onNext])
 
   return (
-    <div className="flex min-h-[60vh] flex-col items-center justify-center px-4 py-12">
+    <div className="flex min-h-[60vh] flex-col items-center justify-center px-4 py-8 sm:py-12">
       <div className="w-full max-w-sm space-y-6">
         {/* Result indicator */}
         <div className="flex flex-col items-center gap-3">

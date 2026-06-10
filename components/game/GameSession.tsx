@@ -362,7 +362,7 @@ export default function GameSession({
     const track = tracks[trackIndex]
 
     return (
-      <div className="mx-auto flex max-w-md flex-col items-center gap-6 px-4 py-8">
+      <div className="mx-auto flex max-w-md flex-col items-center gap-4 px-4 py-4 sm:gap-6 sm:py-8">
         {/* Header: progress + difficulty + timer */}
         <div className="flex w-full items-center justify-between">
           <div>
@@ -477,7 +477,7 @@ function SummaryScreen({
   }
 
   return (
-    <div className="mx-auto max-w-sm px-4 py-12">
+    <div className="mx-auto max-w-sm px-4 py-8 sm:py-12">
       <div className="space-y-6">
         {/* Title */}
         <div className="text-center">

@@ -140,10 +140,10 @@ export default async function ChallengePage({ params }: PageProps) {
         </div>
       </header>
 
-      <main className="mx-auto max-w-5xl px-4 py-10">
-        <div className="grid gap-10 lg:grid-cols-[1fr_360px]">
-          {/* ── Left column ────────────────────────────────────────── */}
-          <div className="space-y-8">
+      <main className="mx-auto max-w-5xl px-4 py-6 sm:py-10">
+        <div className="grid gap-8 lg:grid-cols-[1fr_360px] lg:gap-10">
+          {/* ── Left column (leaderboard etc.) — comes second on mobile ── */}
+          <div className="order-2 space-y-6 sm:space-y-8 lg:order-1">
             {/* Back */}
             <Link
               href="/"
@@ -156,9 +156,9 @@ export default async function ChallengePage({ params }: PageProps) {
             </Link>
 
             {/* Challenge header */}
-            <div className="flex gap-6">
+            <div className="flex gap-4 sm:gap-6">
               {/* Cover */}
-              <div className="h-28 w-28 shrink-0 overflow-hidden rounded-xl bg-white/5 sm:h-36 sm:w-36">
+              <div className="h-24 w-24 shrink-0 overflow-hidden rounded-xl bg-white/5 sm:h-36 sm:w-36">
                 {challenge.cover_image_url ? (
                   <img
                     src={challenge.cover_image_url}
@@ -173,8 +173,8 @@ export default async function ChallengePage({ params }: PageProps) {
               </div>
 
               {/* Metadata */}
-              <div className="flex flex-col justify-center gap-2">
-                <h1 className="text-2xl font-bold text-white sm:text-3xl">
+              <div className="flex min-w-0 flex-col justify-center gap-2">
+                <h1 className="text-xl font-bold text-white sm:text-3xl">
                   {challenge.title}
                 </h1>
                 {challenge.description && (
@@ -209,8 +209,8 @@ export default async function ChallengePage({ params }: PageProps) {
             </div>
           </div>
 
-          {/* ── Right column: play ─────────────────────────────────── */}
-          <div className="lg:sticky lg:top-24 lg:self-start">
+          {/* ── Right column (play) — comes first on mobile ─────────── */}
+          <div className="order-1 lg:order-2 lg:sticky lg:top-24 lg:self-start">
             <div className="rounded-2xl border border-white/10 bg-white/[.03] p-6 space-y-5">
               <h2 className="text-lg font-semibold text-white">Jugar</h2>
               <DifficultySelector challengeId={id} isGuest={isGuest} />

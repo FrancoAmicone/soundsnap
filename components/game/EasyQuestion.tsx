@@ -43,11 +43,11 @@ export default function EasyQuestion({
           <img
             src={track.coverUrl}
             alt="Album cover"
-            className="h-56 w-full object-cover"
+            className="h-44 w-full object-cover sm:h-56"
           />
         </div>
       ) : (
-        <div className="flex h-56 items-center justify-center rounded-2xl bg-white/5">
+        <div className="flex h-44 items-center justify-center rounded-2xl bg-white/5 sm:h-56">
           <span className="text-5xl opacity-20">♪</span>
         </div>
       )}
