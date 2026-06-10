@@ -9,7 +9,6 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
-import ArtistSearch from '@/components/ui/ArtistSearch'
 import UserMenu from '@/components/ui/UserMenu'
 import ChallengeGrid, { type ChallengeItem } from '@/components/ui/ChallengeGrid'
 
@@ -91,22 +90,9 @@ export default async function HomePage() {
         <h2 className="mb-6 text-lg font-semibold text-white/70">
           Challenges disponibles
         </h2>
-        <ChallengeGrid challenges={rows as ChallengeItem[]} />
+        <ChallengeGrid challenges={rows as ChallengeItem[]} isGuest={isGuest} />
       </section>
 
-      {/* ── Play by artist ─────────────────────────────────────────── */}
-      <section className="mx-auto max-w-5xl px-4 pb-24">
-        <div className="rounded-2xl border border-white/10 bg-white/[.03] px-6 py-10">
-          <h2 className="mb-1 text-lg font-semibold text-white">
-            Jugar por artista
-          </h2>
-          <p className="mb-6 text-sm text-white/50">
-            Buscá cualquier artista y arrancá una partida al instante con sus
-            canciones más populares de Deezer.
-          </p>
-          <ArtistSearch isGuest={isGuest} />
-        </div>
-      </section>
     </div>
   )
 }
