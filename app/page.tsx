@@ -9,7 +9,6 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
-import ArtistSearch from '@/components/ui/ArtistSearch'
 import UserMenu from '@/components/ui/UserMenu'
 import ChallengeGrid, { type ChallengeItem } from '@/components/ui/ChallengeGrid'
 
@@ -77,36 +76,23 @@ export default async function HomePage() {
       </header>
 
       {/* ── Hero ───────────────────────────────────────────────────── */}
-      <section className="px-4 pb-14 pt-16 text-center">
-        <h1 className="text-4xl font-bold tracking-tight text-white sm:text-5xl">
+      <section className="px-4 pb-8 pt-10 text-center sm:pb-14 sm:pt-16">
+        <h1 className="text-3xl font-bold tracking-tight text-white sm:text-5xl">
           Sound<span className="text-indigo-400">Snap</span>
         </h1>
-        <p className="mt-3 text-base text-white/50 sm:text-lg">
+        <p className="mt-2 text-sm text-white/50 sm:mt-3 sm:text-lg">
           Escuchá 5 segundos. Adiviná la canción.
         </p>
       </section>
 
       {/* ── Challenge grid ─────────────────────────────────────────── */}
-      <section className="mx-auto max-w-5xl px-4 pb-20">
+      <section className="mx-auto max-w-5xl px-4 pb-12 sm:pb-20">
         <h2 className="mb-6 text-lg font-semibold text-white/70">
           Challenges disponibles
         </h2>
-        <ChallengeGrid challenges={rows as ChallengeItem[]} />
+        <ChallengeGrid challenges={rows as ChallengeItem[]} isGuest={isGuest} />
       </section>
 
-      {/* ── Play by artist ─────────────────────────────────────────── */}
-      <section className="mx-auto max-w-5xl px-4 pb-24">
-        <div className="rounded-2xl border border-white/10 bg-white/[.03] px-6 py-10">
-          <h2 className="mb-1 text-lg font-semibold text-white">
-            Jugar por artista
-          </h2>
-          <p className="mb-6 text-sm text-white/50">
-            Buscá cualquier artista y arrancá una partida al instante con sus
-            canciones más populares de Deezer.
-          </p>
-          <ArtistSearch isGuest={isGuest} />
-        </div>
-      </section>
     </div>
   )
 }

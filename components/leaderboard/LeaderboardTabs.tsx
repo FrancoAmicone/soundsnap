@@ -46,14 +46,14 @@ export default function LeaderboardTabs({
 
   return (
     <div className="space-y-4">
-      {/* Tab strip */}
+      {/* Tab strip — flex-1 so all tabs share width equally on any screen */}
       <div className="flex border-b border-white/10">
         {TABS.map((tab) => (
           <button
             key={tab.value}
             type="button"
             onClick={() => setActive(tab.value)}
-            className={`px-4 py-2 text-sm font-semibold border-b-2 -mb-px transition-colors focus:outline-none ${
+            className={`flex-1 border-b-2 -mb-px py-2 text-center text-xs font-semibold transition-colors focus:outline-none sm:text-sm ${
               active === tab.value
                 ? tab.activeClass
                 : 'border-transparent text-white/30 hover:text-white/60'

@@ -18,12 +18,14 @@
 // =====================================================================
 
 const NOISE_PATTERNS: readonly RegExp[] = [
-  // " - Remastered", " - 2011 Remaster", " - Live at ..." etc.
-  /\s-\s.*$/,
-  // Trailing parenthesised qualifiers: " (Remastered)", "(Live)" ...
-  /\s*\([^)]*\)\s*$/,
-  // Trailing bracketed qualifiers: " [Bonus Track]" ...
-  /\s*\[[^\]]*\]\s*$/,
+  // " - Remastered", " - 2011 Remaster", " - Live at ...", " - Radio Edit" etc.
+  /\s-\s.*/,
+  // Trailing parenthesised qualifiers: "(Remastered 2009)", "(Live)", "(feat. X)" etc.
+  /\s*\([^)]*\)\s*/g,
+  // Trailing bracketed qualifiers: "[Bonus Track]", "[Deluxe]" etc.
+  /\s*\[[^\]]*\]\s*/g,
+  // Standalone feat/ft/featuring (outside parens): "Title feat. Artist"
+  /\s+(?:feat|ft|featuring)[.\s].*/i,
 ]
 
 export function normalize(input: string): string {

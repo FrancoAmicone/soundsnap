@@ -6,8 +6,10 @@
 // Shown between questions after the user answers (or times out).
 // Reveals the correct answer, shows points earned, and has a "Next"
 // button to advance to the next question (or finish).
+// Enter or Space also trigger the next action.
 // =====================================================================
 
+import { useEffect } from 'react'
 import type { Difficulty } from '@/types'
 
 interface ScoreFeedbackProps {
@@ -38,8 +40,20 @@ export default function ScoreFeedback({
 }: ScoreFeedbackProps) {
   const isLast = trackIndex + 1 >= totalQuestions
 
+  // Enter / Space advance to the next question
+  useEffect(() => {
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault()
+        onNext()
+      }
+    }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [onNext])
+
   return (
-    <div className="flex min-h-[60vh] flex-col items-center justify-center px-4 py-12">
+    <div className="flex min-h-[60vh] flex-col items-center justify-center px-4 py-8 sm:py-12">
       <div className="w-full max-w-sm space-y-6">
         {/* Result indicator */}
         <div className="flex flex-col items-center gap-3">
