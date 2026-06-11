@@ -7,7 +7,7 @@
 // =====================================================================
 
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/server'
+import { getUser } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import UserMenu from '@/components/ui/UserMenu'
 import ChallengeGrid, { type ChallengeItem } from '@/components/ui/ChallengeGrid'
@@ -24,28 +24,24 @@ interface Challenge {
 }
 
 export default async function HomePage() {
-  // Auth state
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  const isGuest = !user
-
-  // Load active challenges + completed-session counts in parallel.
-  // game_sessions uses completed_at IS NOT NULL (no status column).
+  // Auth + challenges + play counts all start in parallel.
   const service = createServiceClient()
-  const [{ data: challenges }, { data: playCounts }] = await Promise.all([
-    service
-      .from('challenges')
-      .select('id, title, description, genre_tag, decade_tag, cover_image_url, is_guest_allowed, challenge_type')
-      .eq('is_active', true)
-      .order('created_at', { ascending: false }),
-    service
-      .from('game_sessions')
-      .select('challenge_id')
-      .not('completed_at', 'is', null)
-      .not('challenge_id', 'is', null),
+  const [user, [{ data: challenges }, { data: playCounts }]] = await Promise.all([
+    getUser(),
+    Promise.all([
+      service
+        .from('challenges')
+        .select('id, title, description, genre_tag, decade_tag, cover_image_url, is_guest_allowed, challenge_type')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false }),
+      service
+        .from('game_sessions')
+        .select('challenge_id')
+        .not('completed_at', 'is', null)
+        .not('challenge_id', 'is', null),
+    ]),
   ])
+  const isGuest = !user
 
   // Build a map of challenge_id → completed session count
   const countMap: Record<string, number> = {}

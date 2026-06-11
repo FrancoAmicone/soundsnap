@@ -7,7 +7,7 @@
 
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/server'
+import { getUser } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import GameSession from '@/components/game/GameSession'
 import type { Difficulty } from '@/types'
@@ -29,34 +29,22 @@ export default async function PlayPage({ params, searchParams }: PageProps) {
   }
   const difficulty = rawDifficulty as Difficulty
 
-  // Auth state
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  // Auth + challenge fetched in parallel.
+  const service = createServiceClient()
+  const [user, { data: challenge }] = await Promise.all([
+    getUser(),
+    service
+      .from('challenges')
+      .select('id, title, is_active, is_guest_allowed, challenge_type')
+      .eq('id', id)
+      .eq('is_active', true)
+      .single(),
+  ])
   const isGuest = !user
 
-  // Guests can only play Easy
-  if (isGuest && difficulty !== 'easy') {
-    redirect(`/challenge/${id}`)
-  }
-
-  // Validate challenge exists and is active
-  const service = createServiceClient()
-  const { data: challenge } = await service
-    .from('challenges')
-    .select('id, title, is_active, is_guest_allowed, challenge_type')
-    .eq('id', id)
-    .eq('is_active', true)
-    .single()
-
-  if (!challenge) {
-    redirect('/')
-  }
-
-  if (isGuest && !challenge.is_guest_allowed) {
-    redirect('/')
-  }
+  if (!challenge) redirect('/')
+  if (isGuest && difficulty !== 'easy') redirect(`/challenge/${id}`)
+  if (isGuest && !challenge.is_guest_allowed) redirect('/')
 
   // For artist-type challenges the player already knows who they're
   // playing — pass the artist name so Hard/Intermediate don't ask for it.

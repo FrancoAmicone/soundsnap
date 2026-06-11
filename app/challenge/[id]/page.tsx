@@ -10,12 +10,25 @@
 
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
+import { cache } from 'react'
 import type { Metadata } from 'next'
-import { createClient } from '@/lib/supabase/server'
+import { getUser } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import DifficultySelector from '@/components/ui/DifficultySelector'
 import LeaderboardTabs from '@/components/leaderboard/LeaderboardTabs'
 import UserMenu from '@/components/ui/UserMenu'
+
+// Per-request cache: deduplicates the challenge SELECT between
+// generateMetadata() and the page render (both run in the same request).
+const getChallenge = cache(async (id: string) => {
+  const service = createServiceClient()
+  return service
+    .from('challenges')
+    .select('id, title, description, genre_tag, decade_tag, cover_image_url, is_guest_allowed, is_active')
+    .eq('id', id)
+    .eq('is_active', true)
+    .single()
+})
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -25,13 +38,7 @@ interface PageProps {
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { id } = await params
-  const supabase = createServiceClient()
-  const { data } = await supabase
-    .from('challenges')
-    .select('title, description')
-    .eq('id', id)
-    .single()
-
+  const { data } = await getChallenge(id)
   return {
     title: data ? `${data.title} — SoundSnap` : 'Challenge — SoundSnap',
     description: data?.description ?? undefined,
@@ -43,25 +50,13 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 export default async function ChallengePage({ params }: PageProps) {
   const { id } = await params
 
-  // Auth state (determines guest restrictions)
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  // Auth + challenge fetched in parallel; challenge result is shared with
+  // generateMetadata() via React.cache() so no duplicate SELECT.
+  const [user, { data: challenge, error }] = await Promise.all([
+    getUser(),
+    getChallenge(id),
+  ])
   const isGuest = !user
-
-  // Challenge data via service client so we get ALL active challenges
-  // (the public anon client can also read active challenges, but service
-  //  client is simpler here since we already have it for the service layer)
-  const service = createServiceClient()
-  const { data: challenge, error } = await service
-    .from('challenges')
-    .select(
-      'id, title, description, genre_tag, decade_tag, cover_image_url, is_guest_allowed, is_active',
-    )
-    .eq('id', id)
-    .eq('is_active', true)
-    .single()
 
   if (error || !challenge) {
     notFound()

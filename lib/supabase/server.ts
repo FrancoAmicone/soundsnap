@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { cache } from 'react'
 
 /**
  * Server-side Supabase client for use in Server Components, Server Actions
@@ -35,3 +36,16 @@ export async function createClient() {
     },
   )
 }
+
+/**
+ * Per-request cached auth check. React.cache() deduplicates the call
+ * so pages + their child Server Components (e.g. UserMenu) share one
+ * round-trip to Supabase Auth instead of making one each.
+ */
+export const getUser = cache(async () => {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  return user
+})

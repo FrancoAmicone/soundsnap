@@ -77,14 +77,14 @@ export default function ScoreFeedback({
         </div>
 
         {/* Points */}
-        {pointsEarned > 0 && (
+        {pointsEarned > 0 ? (
           <div className="text-center">
             <span className="text-5xl font-bold text-white">
               +{pointsEarned}
             </span>
             <span className="ml-1 text-sm text-white/50">pts</span>
           </div>
-        )}
+        ) : null}
 
         {/* Correct answer reveal */}
         <div className="rounded-xl border border-white/10 bg-white/[.04] px-5 py-4 text-center">
@@ -96,7 +96,7 @@ export default function ScoreFeedback({
         </div>
 
         {/* Hard mode per-field breakdown */}
-        {difficulty === 'hard' && !isCorrect && (
+        {difficulty === 'hard' && !isCorrect ? (
           <div className="flex gap-3 text-sm">
             <div
               className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 ${
@@ -119,7 +119,7 @@ export default function ScoreFeedback({
               <span>Título</span>
             </div>
           </div>
-        )}
+        ) : null}
 
         {/* Progress */}
         <p className="text-center text-sm text-white/30">
