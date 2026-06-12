@@ -133,32 +133,61 @@ function deduplicateTracks(tracks: DeezerTrack[]): DeezerTrack[] {
   return result
 }
 
-async function fetchPlaylistTracks(
+/** Fetch one page of a playlist (limit + index window). */
+async function fetchPlaylistPage(
   playlistId: string,
   limit: number,
-): Promise<{ tracks: DeezerTrack[]; fetched: number }> {
-  const safeLimit = Math.max(1, Math.min(limit, 100))
+  index: number,
+): Promise<{ items: any[]; total: number }> {
   const url =
     `https://api.deezer.com/playlist/${encodeURIComponent(playlistId)}` +
-    `/tracks?limit=${safeLimit}`
-
+    `/tracks?limit=${limit}&index=${index}`
   const res = await fetch(url, { headers: { accept: 'application/json' } })
   if (!res.ok) {
     const text = await res.text().catch(() => '')
     throw new Error(`Deezer playlist fetch failed: ${res.status} ${text}`)
   }
-  const data = (await res.json()) as { data?: any[]; error?: any }
+  const data = (await res.json()) as { data?: any[]; error?: any; total?: number }
   if (data.error) {
     throw new Error(`Deezer API error: ${JSON.stringify(data.error)}`)
   }
   const items = Array.isArray(data.data) ? data.data : []
+  const total = typeof data.total === 'number' ? data.total : items.length
+  return { items, total }
+}
+
+/**
+ * Fetch a window of a playlist's tracks. To avoid always returning the
+ * same first N entries of a large playlist, we read `total` from page 1
+ * and, when the playlist is larger than the window, re-fetch a RANDOM
+ * offset window so different games draw from different parts of it.
+ */
+async function fetchPlaylistTracks(
+  playlistId: string,
+  limit: number,
+): Promise<{ tracks: DeezerTrack[]; fetched: number; total: number }> {
+  const safeLimit = Math.max(1, Math.min(limit, 100))
+
+  // Page 1 — also tells us the playlist's total size.
+  let { items, total } = await fetchPlaylistPage(playlistId, safeLimit, 0)
+
+  // Larger than the window → pick a random offset window for variety.
+  if (total > safeLimit) {
+    const maxIndex = total - safeLimit
+    const index = Math.floor(Math.random() * (maxIndex + 1))
+    if (index > 0) {
+      const page = await fetchPlaylistPage(playlistId, safeLimit, index)
+      if (page.items.length > 0) items = page.items
+    }
+  }
+
   const raw: DeezerTrack[] = []
   for (const item of items) {
     const mapped = toDeezerTrack(item)
     if (mapped) raw.push(mapped)
   }
   const tracks = deduplicateTracks(raw)
-  return { tracks, fetched: items.length }
+  return { tracks, fetched: items.length, total }
 }
 
 async function fetchArtistTracks(
@@ -287,11 +316,11 @@ Deno.serve(async (req: Request) => {
       if (typeof playlistId !== 'string' || playlistId.length === 0) {
         return json({ error: 'playlistId_required' }, 400)
       }
-      const { tracks, fetched } = await fetchPlaylistTracks(
+      const { tracks, fetched, total } = await fetchPlaylistTracks(
         playlistId,
         typeof limit === 'number' ? limit : 50,
       )
-      return json({ tracks, fetched, withPreview: tracks.length })
+      return json({ tracks, fetched, withPreview: tracks.length, total })
     }
 
     // --- Artist top tracks ---

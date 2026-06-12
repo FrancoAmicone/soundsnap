@@ -34,7 +34,7 @@ import {
   buildServerTracks,
   computeFetchLimit,
   resolveChallengeTracks,
-  shuffle,
+  sampleTracks,
   TRACK_COUNT_COLUMN,
   type ChallengeRow,
 } from '@/lib/tracks'
@@ -205,7 +205,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const sampled = shuffle(tracks.slice()).slice(0, requestedCount)
+    const sampled = sampleTracks(tracks, requestedCount)
     const serverTracks = buildServerTracks(diff, sampled, tracks)
     const tracksData: SessionTracksData = {
       tracks: serverTracks,
@@ -307,7 +307,7 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  const sampled = shuffle(tracks.slice()).slice(0, requestedCount)
+  const sampled = sampleTracks(tracks, requestedCount)
   const serverTracks = buildServerTracks(diff, sampled, tracks)
   const tracksData: SessionTracksData = {
     tracks: serverTracks,

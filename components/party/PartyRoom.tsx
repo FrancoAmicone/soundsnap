@@ -15,14 +15,20 @@
 // =====================================================================
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/client'
 import { partyChannelName, PARTY_BROADCAST } from '@/lib/realtime'
-import type { PartyBroadcastEvent, PartyStateResponse } from '@/types'
+import type {
+  PartyBroadcastEvent,
+  PartyCreateResponse,
+  PartyStateResponse,
+} from '@/types'
 import PartyLobby from './PartyLobby'
 import PartyRound from './PartyRound'
 import PartyRoundResults from './PartyRoundResults'
 import PartyFinalResults from './PartyFinalResults'
+import ReactionOverlay, { type FloatingReaction } from './ReactionOverlay'
 
 export default function PartyRoom({
   initialState,
@@ -34,9 +40,12 @@ export default function PartyRoom({
   const myName =
     initialState.members.find((m) => m.userId === meId)?.username ?? 'Jugador'
 
+  const router = useRouter()
   const [state, setState] = useState<PartyStateResponse>(initialState)
   const [connectedIds, setConnectedIds] = useState<string[]>([meId])
+  const [reactions, setReactions] = useState<FloatingReaction[]>([])
   const channelRef = useRef<RealtimeChannel | null>(null)
+  const reactionIdRef = useRef(0)
 
   const refetch = useCallback(async () => {
     const res = await fetch(`/api/party/${code}`, { cache: 'no-store' })
@@ -51,6 +60,23 @@ export default function PartyRoom({
     })
   }, [])
 
+  // Float an emoji for ~3s (used for both incoming and own reactions).
+  const pushReaction = useCallback((emoji: string) => {
+    const id = reactionIdRef.current++
+    setReactions((r) => [...r, { id, emoji }])
+    setTimeout(() => {
+      setReactions((r) => r.filter((x) => x.id !== id))
+    }, 3000)
+  }, [])
+
+  const sendReaction = useCallback(
+    (emoji: string) => {
+      pushReaction(emoji) // show immediately to the sender
+      broadcast({ type: 'reaction', emoji, userId: meId })
+    },
+    [pushReaction, broadcast, meId],
+  )
+
   // ── Realtime channel ────────────────────────────────────────────────
   useEffect(() => {
     const supabase = createClient()
@@ -60,8 +86,16 @@ export default function PartyRoom({
     channelRef.current = channel
 
     channel
-      .on('broadcast', { event: PARTY_BROADCAST }, () => {
-        refetch()
+      .on('broadcast', { event: PARTY_BROADCAST }, ({ payload }) => {
+        const ev = payload as PartyBroadcastEvent
+        if (ev.type === 'reaction') {
+          // Don't echo our own (we already showed it on send).
+          if (ev.userId !== meId) pushReaction(ev.emoji)
+        } else if (ev.type === 'rematch') {
+          router.push(`/party/${ev.code}`)
+        } else {
+          refetch()
+        }
       })
       .on('presence', { event: 'sync' }, () => {
         setConnectedIds(Object.keys(channel.presenceState()))
@@ -76,7 +110,7 @@ export default function PartyRoom({
       supabase.removeChannel(channel)
       channelRef.current = null
     }
-  }, [code, meId, myName, refetch])
+  }, [code, meId, myName, refetch, pushReaction, router])
 
   // ── Action handlers ─────────────────────────────────────────────────
   const notifyLobby = useCallback(() => {
@@ -121,9 +155,24 @@ export default function PartyRoom({
     return null
   }, [code, broadcast])
 
+  const handleRematch = useCallback(async (): Promise<string | null> => {
+    const res = await fetch('/api/party/create', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ difficulty: state.difficulty }),
+    })
+    const data = await res.json()
+    if (!res.ok) return (data as { error?: string }).error ?? 'No se pudo crear la revancha'
+    const { code: newCode } = data as PartyCreateResponse
+    broadcast({ type: 'rematch', code: newCode })
+    router.push(`/party/${newCode}`)
+    return null
+  }, [state.difficulty, broadcast, router])
+
   // ── Render by phase ─────────────────────────────────────────────────
+  let content: React.ReactNode
   if (state.status === 'lobby') {
-    return (
+    content = (
       <PartyLobby
         state={state}
         connectedIds={connectedIds}
@@ -131,22 +180,26 @@ export default function PartyRoom({
         onStart={handleStart}
       />
     )
-  }
-
-  if (state.status === 'finished') {
-    return <PartyFinalResults state={state} />
-  }
-
-  // in_progress
-  if (state.mySession && !state.myRoundDone) {
-    return <PartyRound state={state} onComplete={handleRoundComplete} />
+  } else if (state.status === 'finished') {
+    content = <PartyFinalResults state={state} onRematch={handleRematch} />
+  } else if (state.mySession && !state.myRoundDone) {
+    // in_progress, my round to play
+    content = <PartyRound state={state} onComplete={handleRoundComplete} />
+  } else {
+    content = (
+      <PartyRoundResults
+        state={state}
+        connectedIds={connectedIds}
+        onNext={handleNext}
+        onReact={sendReaction}
+      />
+    )
   }
 
   return (
-    <PartyRoundResults
-      state={state}
-      connectedIds={connectedIds}
-      onNext={handleNext}
-    />
+    <>
+      {content}
+      <ReactionOverlay reactions={reactions} />
+    </>
   )
 }

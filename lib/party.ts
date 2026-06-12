@@ -21,7 +21,7 @@ import {
   computeFetchLimit,
   resolveChallengeTracks,
   resolveMixTracks,
-  shuffle,
+  sampleTracks,
   type ChallengeRow,
 } from '@/lib/tracks'
 import type {
@@ -218,8 +218,19 @@ export async function buildRound(
     )
   }
 
+  // -- Anti-repeat: exclude tracks already used in earlier rounds --------
+  const { data: priorRounds } = await admin
+    .from('party_rounds')
+    .select('tracks_data')
+    .eq('party_id', party.id)
+  const usedIds = new Set<string>()
+  for (const r of priorRounds ?? []) {
+    const td = (r as { tracks_data: SessionTracksData | null }).tracks_data
+    if (td?.tracks) for (const t of td.tracks) usedIds.add(t.trackId)
+  }
+
   // -- Shared snapshot ---------------------------------------------------
-  const sampled = shuffle(pool.slice()).slice(0, requestedCount)
+  const sampled = sampleTracks(pool, requestedCount, usedIds)
   const serverTracks: ServerTrack[] = buildServerTracks(difficulty, sampled, pool)
   const tracksData: SessionTracksData = {
     tracks: serverTracks,
@@ -336,16 +347,26 @@ export async function getPartyState(
   let round: PartyRoundView | null = null
   if (currentRoundRow) {
     const ownerMember = members.find((m) => m.id === currentRoundRow.owner_member_id)
-    const finishedCount = sessions.filter(
+    const roundSessions = sessions.filter(
       (s) => s.party_round_id === currentRoundRow.id && s.completed_at !== null,
-    ).length
+    )
+    // Fastest finisher this round = lowest completed duration_ms.
+    let fastestUserId: string | null = null
+    let fastestMs = Infinity
+    for (const s of roundSessions) {
+      if (s.user_id && (s.duration_ms ?? Infinity) < fastestMs) {
+        fastestMs = s.duration_ms ?? Infinity
+        fastestUserId = s.user_id
+      }
+    }
     round = {
       roundNumber: currentRoundRow.round_number,
       roundType: currentRoundRow.round_type,
       artistLabel: currentRoundRow.artist_label,
       ownerUserId: ownerMember?.user_id ?? null,
-      finishedCount,
+      finishedCount: roundSessions.length,
       totalMembers: members.length,
+      fastestUserId,
     }
   }
 

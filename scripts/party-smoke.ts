@@ -15,8 +15,9 @@ import {
   generatePartyCode,
   type MemberRow,
 } from '@/lib/party'
-import { buildClientTrack } from '@/lib/tracks'
-import type { ServerTrack } from '@/types'
+import { buildClientTrack, sampleTracks } from '@/lib/tracks'
+import { calcStreakBonus } from '@/lib/scoring'
+import type { DeezerTrack, ServerTrack } from '@/types'
 
 let passed = 0
 let failed = 0
@@ -129,6 +130,41 @@ ok('easy: sin correctArtist', !JSON.stringify(easy).includes('Secret Artist'))
 for (const ct of [interPlaylist, interArtist, hard]) {
   ok('payload sin correctTitle', !JSON.stringify(ct).includes('Secret Title'))
 }
+
+// ── sampleTracks: anti-repeat ─────────────────────────────────────────
+console.log('\nsampleTracks — anti-repetición')
+function dz(id: string): DeezerTrack {
+  return { id, name: `T${id}`, artist: 'A', albumName: 'Al', previewUrl: 'p', coverUrl: null }
+}
+const pool10 = Array.from({ length: 10 }, (_, i) => dz(String(i)))
+
+const noExclude = sampleTracks(pool10, 5)
+ok('sin exclude: devuelve 5', noExclude.length === 5)
+ok('sin exclude: sin duplicados', new Set(noExclude.map((t) => t.id)).size === 5)
+
+const exclude = new Set(['0', '1', '2', '3', '4'])
+let avoided = 0
+for (let i = 0; i < 50; i++) {
+  const picked = sampleTracks(pool10, 5, exclude)
+  if (picked.every((t) => !exclude.has(t.id))) avoided++
+}
+ok('con 5 frescos disponibles: nunca toca los excluidos (50 corridas)', avoided === 50)
+
+// Not enough fresh → must top up with excluded (never returns < count).
+const exclude8 = new Set(['0', '1', '2', '3', '4', '5', '6', '7'])
+const topUp = sampleTracks(pool10, 5, exclude8)
+ok('pozo insuficiente de frescos: igual devuelve 5', topUp.length === 5)
+ok('top-up: incluye los 2 frescos (8,9)', topUp.some((t) => t.id === '8') && topUp.some((t) => t.id === '9'))
+ok('top-up: sin duplicados', new Set(topUp.map((t) => t.id)).size === 5)
+
+// ── calcStreakBonus ───────────────────────────────────────────────────
+console.log('\ncalcStreakBonus')
+eq('racha 1 → 0', calcStreakBonus(1), 0)
+eq('racha 2 → 25', calcStreakBonus(2), 25)
+eq('racha 3 → 50', calcStreakBonus(3), 50)
+eq('racha 6 → 125 (cap)', calcStreakBonus(6), 125)
+eq('racha 12 → 125 (cap)', calcStreakBonus(12), 125)
+eq('racha 0 → 0', calcStreakBonus(0), 0)
 
 // ── Summary ───────────────────────────────────────────────────────────
 console.log(`\n${'─'.repeat(50)}`)

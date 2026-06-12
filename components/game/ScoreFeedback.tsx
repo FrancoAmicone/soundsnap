@@ -20,6 +20,9 @@ interface ScoreFeedbackProps {
   /** Hard mode per-field feedback */
   artistOk?: boolean
   titleOk?: boolean
+  /** Consecutive-correct streak + the bonus it added (0 when none). */
+  streak?: number
+  streakBonus?: number
   trackIndex: number
   totalQuestions: number
   difficulty: Difficulty
@@ -33,6 +36,8 @@ export default function ScoreFeedback({
   correctArtist,
   artistOk,
   titleOk,
+  streak = 0,
+  streakBonus = 0,
   trackIndex,
   totalQuestions,
   difficulty,
@@ -83,6 +88,14 @@ export default function ScoreFeedback({
               +{pointsEarned}
             </span>
             <span className="ml-1 text-sm text-white/50">pts</span>
+          </div>
+        ) : null}
+
+        {/* Streak */}
+        {streakBonus > 0 ? (
+          <div className="flex items-center justify-center gap-1.5 text-sm font-semibold text-orange-400">
+            <span>🔥 Racha ×{streak}</span>
+            <span className="text-white/50">+{streakBonus}</span>
           </div>
         ) : null}
 

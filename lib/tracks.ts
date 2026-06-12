@@ -246,10 +246,38 @@ export function buildClientTrack(
   }
 }
 
-/** Clamp the Deezer fetch limit the same way across callers. */
+/**
+ * How many tracks to fetch into the sampling pool. We aim for a large pool
+ * (~100, Deezer's max per request — one cheap call) so that sampling N
+ * yields very different sets across games instead of always drawing from a
+ * small fixed top-30.
+ */
 export function computeFetchLimit(requestedCount: number): number {
-  return Math.min(
-    Math.max(requestedCount * 2, requestedCount + 10, 30),
-    100,
-  )
+  return Math.min(100, Math.max(requestedCount * 4, 80))
+}
+
+/**
+ * Pick `count` tracks from `pool`, avoiding `excludeIds` when possible.
+ * Shuffles the non-excluded tracks first; if those don't cover `count`
+ * (small catalog), tops up with the excluded ones (also shuffled) so we
+ * never return fewer than `min(count, pool.length)`.
+ */
+export function sampleTracks(
+  pool: DeezerTrack[],
+  count: number,
+  excludeIds?: ReadonlySet<string>,
+): DeezerTrack[] {
+  if (!excludeIds || excludeIds.size === 0) {
+    return shuffle(pool.slice()).slice(0, count)
+  }
+  const fresh: DeezerTrack[] = []
+  const used: DeezerTrack[] = []
+  for (const t of pool) {
+    ;(excludeIds.has(t.id) ? used : fresh).push(t)
+  }
+  const picked = shuffle(fresh).slice(0, count)
+  if (picked.length < count) {
+    picked.push(...shuffle(used).slice(0, count - picked.length))
+  }
+  return picked
 }

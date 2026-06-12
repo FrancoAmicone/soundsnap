@@ -6,6 +6,7 @@
 // End of the party: final ranking by accumulated score, winner on top.
 // =====================================================================
 
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { PartyStateResponse } from '@/types'
 
@@ -13,11 +14,26 @@ const MEDAL: Record<number, string> = { 1: '🥇', 2: '🥈', 3: '🥉' }
 
 export default function PartyFinalResults({
   state,
+  onRematch,
 }: {
   state: PartyStateResponse
+  onRematch: () => Promise<string | null>
 }) {
   const router = useRouter()
   const winner = state.leaderboard[0]
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleRematch() {
+    setBusy(true)
+    setError(null)
+    const err = await onRematch()
+    if (err) {
+      setError(err)
+      setBusy(false)
+    }
+    // On success we navigate away, so no need to reset busy.
+  }
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -85,7 +101,26 @@ export default function PartyFinalResults({
           })}
         </div>
 
-        <div className="mt-8 flex gap-3">
+        {state.me.isHost ? (
+          <button
+            type="button"
+            onClick={handleRematch}
+            disabled={busy}
+            className="mt-8 w-full rounded-xl bg-indigo-600 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-500 disabled:opacity-50"
+          >
+            {busy ? 'Creando revancha…' : '🔁 Revancha (mismos jugadores)'}
+          </button>
+        ) : (
+          <p className="mt-8 text-center text-xs text-white/30">
+            Si el host arranca una revancha, te llevamos automáticamente.
+          </p>
+        )}
+
+        {error ? (
+          <p className="mt-3 text-center text-sm text-red-400">{error}</p>
+        ) : null}
+
+        <div className="mt-4 flex gap-3">
           <button
             type="button"
             onClick={() => router.push('/party')}

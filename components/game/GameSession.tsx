@@ -30,6 +30,7 @@ import type {
 import dynamic from 'next/dynamic'
 import AudioPlayer from './AudioPlayer'
 import Timer from './Timer'
+import RoundCountdown from './RoundCountdown'
 
 // Lazy-load question components: only one difficulty is ever shown per
 // session, so the other two modules don't need to be in the initial chunk.
@@ -70,10 +71,16 @@ interface GameSessionProps {
    * the single-player summary (party mode shows a shared results screen).
    */
   onComplete?: (result: SessionCompleteResponse) => void
+  /**
+   * Show a 3-2-1 countdown (and preload the first preview) before the round
+   * starts. Defaults to true. The countdown runs once per round.
+   */
+  countdown?: boolean
 }
 
 type Phase =
   | { kind: 'loading' }
+  | { kind: 'countdown' }
   | { kind: 'playing'; trackIndex: number; startedAt: number }
   | { kind: 'feedback'; trackIndex: number; answer: AnswerResponse }
   | { kind: 'complete'; result: SessionCompleteResponse }
@@ -111,6 +118,7 @@ export default function GameSession({
   initialTracks,
   initialTotalQuestions,
   onComplete,
+  countdown = true,
 }: GameSessionProps) {
   const router = useRouter()
 
@@ -134,7 +142,11 @@ export default function GameSession({
       setSessionId(initialSessionId)
       setTracks(initialTracks)
       setTotalQuestions(initialTotalQuestions ?? initialTracks.length)
-      setPhase({ kind: 'playing', trackIndex: 0, startedAt: Date.now() })
+      setPhase(
+        countdown
+          ? { kind: 'countdown' }
+          : { kind: 'playing', trackIndex: 0, startedAt: Date.now() },
+      )
       return
     }
 
@@ -159,7 +171,11 @@ export default function GameSession({
         setSessionId(data.sessionId)
         setTracks(data.tracks)
         setTotalQuestions(data.totalQuestions)
-        setPhase({ kind: 'playing', trackIndex: 0, startedAt: Date.now() })
+        setPhase(
+        countdown
+          ? { kind: 'countdown' }
+          : { kind: 'playing', trackIndex: 0, startedAt: Date.now() },
+      )
       } catch (err) {
         setPhase({
           kind: 'error',
@@ -179,6 +195,26 @@ export default function GameSession({
       setArtistRevealed(false)
     }
   }, [phase])
+
+  // ── Server-authoritative timing: ping question-start per question ───
+  // Fires once per trackIndex as it becomes playable, so /answer can score
+  // from a trusted clock instead of the client's timeTakenMs.
+  const pingedRef = useRef<Set<number>>(new Set())
+  useEffect(() => {
+    if (phase.kind !== 'playing' || !sessionId) return
+    const idx = phase.trackIndex
+    if (pingedRef.current.has(idx)) return
+    pingedRef.current.add(idx)
+    const track = tracks[idx]
+    if (!track) return
+    fetch('/api/session/question-start', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ sessionId, trackId: track.trackId }),
+    }).catch(() => {
+      // Non-fatal: /answer falls back to the client time if no start exists.
+    })
+  }, [phase, sessionId, tracks])
 
   // ── Submit answer to server ─────────────────────────────────────────
   const submitAnswer = useCallback(
@@ -212,6 +248,8 @@ export default function GameSession({
             pointsEarned: 0,
             correctTitle: '(error al obtener respuesta)',
             correctArtist: '',
+            streak: 0,
+            streakBonus: 0,
           },
         })
       } finally {
@@ -299,7 +337,7 @@ export default function GameSession({
         setPhase({
           kind: 'feedback',
           trackIndex,
-          answer: { isCorrect: false, pointsEarned: 0, correctTitle: '—', correctArtist: '—' },
+          answer: { isCorrect: false, pointsEarned: 0, correctTitle: '—', correctArtist: '—', streak: 0, streakBonus: 0 },
         })
       })
       .finally(() => {
@@ -354,6 +392,17 @@ export default function GameSession({
     )
   }
 
+  if (phase.kind === 'countdown' && tracks[0]) {
+    return (
+      <RoundCountdown
+        previewUrl={tracks[0].previewUrl}
+        onReady={() =>
+          setPhase({ kind: 'playing', trackIndex: 0, startedAt: Date.now() })
+        }
+      />
+    )
+  }
+
   if (phase.kind === 'error') {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-4 text-center">
@@ -402,6 +451,8 @@ export default function GameSession({
           correctArtist={phase.answer.correctArtist}
           artistOk={phase.answer.artistOk}
           titleOk={phase.answer.titleOk}
+          streak={phase.answer.streak}
+          streakBonus={phase.answer.streakBonus}
           trackIndex={phase.trackIndex}
           totalQuestions={totalQuestions}
           difficulty={difficulty}
