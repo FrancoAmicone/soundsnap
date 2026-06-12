@@ -10,16 +10,19 @@
 
 import { useState } from 'react'
 import type { PartyStateResponse } from '@/types'
+import ReactionBar from './ReactionBar'
 
 interface PartyRoundResultsProps {
   state: PartyStateResponse
   connectedIds: string[]
   onNext: () => Promise<string | null>
+  onReact: (emoji: string) => void
 }
 
 export default function PartyRoundResults({
   state,
   onNext,
+  onReact,
 }: PartyRoundResultsProps) {
   const round = state.round
   const isHost = state.me.isHost
@@ -27,6 +30,9 @@ export default function PartyRoundResults({
   const total = round?.totalMembers ?? state.members.length
   const allDone = finished >= total
   const isLastRound = state.currentRound >= state.totalRounds
+  const fastest = round?.fastestUserId
+    ? state.members.find((m) => m.userId === round.fastestUserId)
+    : null
 
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -54,6 +60,11 @@ export default function PartyRoundResults({
               ? 'Todos terminaron la ronda'
               : `Terminaron ${finished} de ${total}…`}
           </p>
+          {fastest ? (
+            <p className="mt-1 text-sm font-semibold text-amber-300">
+              ⚡ Más rápido: {fastest.username}
+            </p>
+          ) : null}
         </div>
 
         {/* Leaderboard */}
@@ -132,6 +143,10 @@ export default function PartyRoundResults({
         {error ? (
           <p className="mt-4 text-center text-sm text-red-400">{error}</p>
         ) : null}
+
+        <div className="mt-8">
+          <ReactionBar onReact={onReact} />
+        </div>
       </main>
     </div>
   )

@@ -47,6 +47,22 @@ export function getMultiplier(difficulty: Difficulty): number {
   return MULTIPLIER[difficulty]
 }
 
+/** Streak bonus tuning: +25 per consecutive correct beyond the first, capped. */
+const STREAK_STEP = 25
+const STREAK_CAP = 5
+
+/**
+ * Bonus for a run of consecutive correct answers. `consecutiveCorrect` is
+ * the length of the streak INCLUDING the current answer (so the first
+ * correct answer = 1 → no bonus; 2 in a row → +25; … capped at +125).
+ * Added to the raw question points, so it receives the difficulty
+ * multiplier at /complete like everything else.
+ */
+export function calcStreakBonus(consecutiveCorrect: number): number {
+  if (consecutiveCorrect <= 1) return 0
+  return Math.min(consecutiveCorrect - 1, STREAK_CAP) * STREAK_STEP
+}
+
 /**
  * Points earned for a single question.
  *

@@ -19,7 +19,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { isCorrectAnswer, validateHardAnswer } from '@/lib/matchAnswer'
-import { calcQuestionPoints } from '@/lib/scoring'
+import { calcQuestionPoints, calcStreakBonus } from '@/lib/scoring'
 import type {
   AnswerRequest,
   AnswerResponse,
@@ -210,9 +210,47 @@ export async function POST(request: NextRequest) {
   }
 
   // ---------------------------------------------------------------------
-  // Score (raw — no multiplier yet)
+  // Authoritative timing: prefer the server-recorded question start over
+  // the client's self-reported timeTakenMs (anti-cheat). Falls back to the
+  // clamped client value when no start was recorded (older clients).
   // ---------------------------------------------------------------------
-  const pointsEarned = calcQuestionPoints(isCorrect, timeTakenMs, difficulty)
+  const { data: startRow } = await admin
+    .from('session_question_starts')
+    .select('started_at')
+    .eq('session_id', session.id)
+    .eq('track_id', trackId)
+    .maybeSingle()
+
+  const clientMs = Math.max(0, Math.min(Math.round(timeTakenMs), 30000))
+  const effectiveMs =
+    startRow?.started_at != null
+      ? Math.max(0, Math.min(Date.now() - new Date(startRow.started_at).getTime(), 30000))
+      : clientMs
+
+  // ---------------------------------------------------------------------
+  // Score (raw — no multiplier yet) + streak bonus
+  // ---------------------------------------------------------------------
+  const basePoints = calcQuestionPoints(isCorrect, effectiveMs, difficulty)
+
+  // Streak = consecutive correct answers ending with THIS one. We read the
+  // prior answers (before inserting this one) and count the trailing run.
+  let streak = 0
+  let streakBonus = 0
+  if (isCorrect) {
+    const { data: prior } = await admin
+      .from('session_answers')
+      .select('is_correct, created_at')
+      .eq('session_id', session.id)
+      .order('created_at', { ascending: true })
+    let trailing = 0
+    for (let i = (prior?.length ?? 0) - 1; i >= 0; i--) {
+      if (prior![i].is_correct) trailing++
+      else break
+    }
+    streak = trailing + 1
+    streakBonus = calcStreakBonus(streak)
+  }
+  const pointsEarned = basePoints + streakBonus
 
   // ---------------------------------------------------------------------
   // Persist the answer row
@@ -229,7 +267,7 @@ export async function POST(request: NextRequest) {
     user_artist: userArtist,
     artist_correct: artistCorrect,
     is_correct: isCorrect,
-    time_taken_ms: Math.max(0, Math.round(timeTakenMs)),
+    time_taken_ms: effectiveMs,
     artist_revealed: artistRevealed,
     points_earned: pointsEarned,
   })
@@ -244,6 +282,8 @@ export async function POST(request: NextRequest) {
     pointsEarned,
     correctTitle: track.correctTitle,
     correctArtist: track.correctArtist,
+    streak,
+    streakBonus,
     ...(difficulty === 'hard'
       ? {
           artistOk: artistCorrect ?? false,

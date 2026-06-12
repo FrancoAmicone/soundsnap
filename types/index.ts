@@ -199,6 +199,19 @@ export interface AnswerResponse {
   /** Hard only — per-field feedback for richer UI animations. */
   artistOk?: boolean
   titleOk?: boolean
+  /** Current consecutive-correct streak length (0 when the answer is wrong). */
+  streak: number
+  /** Streak bonus included in pointsEarned (0 when no streak). */
+  streakBonus: number
+}
+
+// ---------------------------------------------------------------------
+// /api/session/question-start
+// ---------------------------------------------------------------------
+
+export interface QuestionStartRequest {
+  sessionId: string
+  trackId: string
 }
 
 // ---------------------------------------------------------------------
@@ -264,6 +277,8 @@ export interface PartyRoundView {
   /** How many members already finished this round. */
   finishedCount: number
   totalMembers: number
+  /** Member with the lowest round duration among those who finished (null until any do). */
+  fastestUserId: string | null
 }
 
 /** One row of the party leaderboard (accumulated across finished rounds). */
@@ -343,3 +358,5 @@ export type PartyBroadcastEvent =
   | { type: 'member_finished'; userId: string; round: number }
   | { type: 'round_finished'; round: number }
   | { type: 'party_finished' }
+  | { type: 'reaction'; emoji: string; userId: string }
+  | { type: 'rematch'; code: string }
