@@ -27,12 +27,16 @@ import type {
   SessionCompleteResponse,
   SessionStartResponse,
 } from '@/types'
+import dynamic from 'next/dynamic'
 import AudioPlayer from './AudioPlayer'
 import Timer from './Timer'
-import EasyQuestion from './EasyQuestion'
-import IntermediateQuestion from './IntermediateQuestion'
-import HardQuestion from './HardQuestion'
-import ScoreFeedback from './ScoreFeedback'
+
+// Lazy-load question components: only one difficulty is ever shown per
+// session, so the other two modules don't need to be in the initial chunk.
+const EasyQuestion = dynamic(() => import('./EasyQuestion'))
+const IntermediateQuestion = dynamic(() => import('./IntermediateQuestion'))
+const HardQuestion = dynamic(() => import('./HardQuestion'))
+const ScoreFeedback = dynamic(() => import('./ScoreFeedback'))
 
 // -----------------------------------------------------------------------
 // Types
@@ -53,6 +57,19 @@ interface GameSessionProps {
    * Hard mode hides the artist field; Intermediate shows it immediately.
    */
   knownArtist?: string
+  /**
+   * Pre-created mode (party rounds): the session already exists server-side
+   * and the safe track payload is supplied directly, so GameSession skips
+   * the /api/session/start call.
+   */
+  initialSessionId?: string
+  initialTracks?: ClientTrack[]
+  initialTotalQuestions?: number
+  /**
+   * When provided, on completion GameSession calls this instead of showing
+   * the single-player summary (party mode shows a shared results screen).
+   */
+  onComplete?: (result: SessionCompleteResponse) => void
 }
 
 type Phase =
@@ -60,6 +77,7 @@ type Phase =
   | { kind: 'playing'; trackIndex: number; startedAt: number }
   | { kind: 'feedback'; trackIndex: number; answer: AnswerResponse }
   | { kind: 'complete'; result: SessionCompleteResponse }
+  | { kind: 'submitted' }
   | { kind: 'error'; message: string }
 
 // -----------------------------------------------------------------------
@@ -89,6 +107,10 @@ export default function GameSession({
   artistName,
   isLoggedIn = false,
   knownArtist,
+  initialSessionId,
+  initialTracks,
+  initialTotalQuestions,
+  onComplete,
 }: GameSessionProps) {
   const router = useRouter()
 
@@ -97,6 +119,7 @@ export default function GameSession({
   const [tracks, setTracks] = useState<ClientTrack[]>([])
   const [totalQuestions, setTotalQuestions] = useState(0)
   const [submitting, setSubmitting] = useState(false)
+  const submittingRef = useRef(false)
   const [artistRevealed, setArtistRevealed] = useState(false)
   // Guard against React StrictMode double-invoking the effect in dev
   const sessionStarted = useRef(false)
@@ -105,6 +128,15 @@ export default function GameSession({
   useEffect(() => {
     if (sessionStarted.current) return
     sessionStarted.current = true
+
+    // Pre-created mode (party): session already exists, tracks supplied.
+    if (initialSessionId && initialTracks) {
+      setSessionId(initialSessionId)
+      setTracks(initialTracks)
+      setTotalQuestions(initialTotalQuestions ?? initialTracks.length)
+      setPhase({ kind: 'playing', trackIndex: 0, startedAt: Date.now() })
+      return
+    }
 
     async function startSession() {
       if (!challengeId && !artistId) {
@@ -155,7 +187,8 @@ export default function GameSession({
       payload: Record<string, unknown>,
       trackIndex: number,
     ) => {
-      if (!sessionId || submitting) return
+      if (!sessionId || submittingRef.current) return
+      submittingRef.current = true
       setSubmitting(true)
 
       try {
@@ -182,10 +215,11 @@ export default function GameSession({
           },
         })
       } finally {
+        submittingRef.current = false
         setSubmitting(false)
       }
     },
-    [sessionId, difficulty, submitting],
+    [sessionId, difficulty],
   )
 
   // ── Easy: user clicked an MC option ────────────────────────────────
@@ -229,10 +263,11 @@ export default function GameSession({
 
   // ── Timer ran out ───────────────────────────────────────────────────
   const handleTimeout = useCallback(() => {
-    if (phase.kind !== 'playing' || submitting) return
+    if (phase.kind !== 'playing' || submittingRef.current) return
     const { trackIndex } = phase
     const track = tracks[trackIndex]
 
+    submittingRef.current = true
     setSubmitting(true)
 
     let payload: Record<string, unknown>
@@ -267,8 +302,11 @@ export default function GameSession({
           answer: { isCorrect: false, pointsEarned: 0, correctTitle: '—', correctArtist: '—' },
         })
       })
-      .finally(() => setSubmitting(false))
-  }, [phase, tracks, sessionId, difficulty, submitting])
+      .finally(() => {
+        submittingRef.current = false
+        setSubmitting(false)
+      })
+  }, [phase, tracks, sessionId, difficulty])
 
   // ── Advance to next question or complete ────────────────────────────
   function handleNext(trackIndex: number) {
@@ -290,7 +328,13 @@ export default function GameSession({
       })
       const data: SessionCompleteResponse & { error?: string } = await res.json()
       if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`)
-      setPhase({ kind: 'complete', result: data })
+      if (onComplete) {
+        // Party mode: hand off to the parent (shared results screen).
+        onComplete(data)
+        setPhase({ kind: 'submitted' })
+      } else {
+        setPhase({ kind: 'complete', result: data })
+      }
     } catch {
       setPhase({
         kind: 'error',
@@ -322,6 +366,17 @@ export default function GameSession({
         >
           ← Volver
         </button>
+      </div>
+    )
+  }
+
+  if (phase.kind === 'submitted') {
+    return (
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-4 text-center">
+        <div className="text-4xl">✓</div>
+        <p className="text-white">¡Terminaste la ronda!</p>
+        <p className="text-sm text-white/40">Esperando a los demás jugadores…</p>
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-white/10 border-t-indigo-400" />
       </div>
     )
   }
@@ -406,27 +461,23 @@ export default function GameSession({
         <AudioPlayer previewUrl={track.previewUrl} disabled={submitting} />
 
         {/* Question UI */}
-        {difficulty === 'easy' && (
+        {difficulty === 'easy' ? (
           <EasyQuestion
             track={track}
             startedAt={startedAt}
             onAnswer={handleEasyAnswer}
             disabled={submitting}
           />
-        )}
-
-        {difficulty === 'intermediate' && (
+        ) : difficulty === 'intermediate' ? (
           <IntermediateQuestion
             track={track}
             startedAt={startedAt}
-            artistRevealed={artistRevealed}
+            revealed={artistRevealed}
             onAnswer={handleIntermediateAnswer}
             disabled={submitting}
             knownArtist={knownArtist}
           />
-        )}
-
-        {difficulty === 'hard' && (
+        ) : (
           <HardQuestion
             trackId={track.trackId}
             startedAt={startedAt}
@@ -482,11 +533,11 @@ function SummaryScreen({
         {/* Title */}
         <div className="text-center">
           <h1 className="text-2xl font-bold text-white">Resultado final</h1>
-          {artistName && (
+          {artistName ? (
             <p className="mt-1 text-sm text-white/40">
               {result.artistName ?? artistName}
             </p>
-          )}
+          ) : null}
         </div>
 
         {/* Score */}
@@ -514,7 +565,7 @@ function SummaryScreen({
         </div>
 
         {/* Guest CTA */}
-        {!isLoggedIn && (
+        {!isLoggedIn ? (
           <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-4 text-center">
             <p className="text-sm font-medium text-amber-300">
               Tu puntaje no fue guardado
@@ -530,17 +581,17 @@ function SummaryScreen({
               Entrar con Google
             </a>
           </div>
-        )}
+        ) : null}
 
-        {!result.saved && isLoggedIn && (
+        {!result.saved && isLoggedIn ? (
           <p className="text-center text-xs text-white/30">
             Score guardado en el leaderboard.
           </p>
-        )}
+        ) : null}
 
         {/* Actions */}
         <div className="flex gap-3">
-          {challengeId && (
+          {challengeId ? (
             <button
               type="button"
               onClick={() => router.push(`/challenge/${challengeId}`)}
@@ -548,7 +599,7 @@ function SummaryScreen({
             >
               Ver leaderboard
             </button>
-          )}
+          ) : null}
           <button
             type="button"
             onClick={() => router.push('/')}

@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "smoke:party": "node --experimental-strip-types --import ./scripts/register-alias.mjs scripts/party-smoke.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.3",

@@ -9,7 +9,7 @@
 // =====================================================================
 
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, getUser } from '@/lib/supabase/server'
 
 interface UserMenuProps {
   /** Optional path to redirect-to after login (forwarded as ?next=). */
@@ -17,10 +17,7 @@ interface UserMenuProps {
 }
 
 export default async function UserMenu({ loginNext }: UserMenuProps) {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const user = await getUser()
 
   if (!user) {
     const href = loginNext
@@ -36,6 +33,7 @@ export default async function UserMenu({ loginNext }: UserMenuProps) {
     )
   }
 
+  const supabase = await createClient()
   const { data: profile } = await supabase
     .from('profiles')
     .select('username, avatar_url')
