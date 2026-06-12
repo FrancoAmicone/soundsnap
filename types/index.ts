@@ -103,19 +103,37 @@ export interface SessionTracksData {
  *
  * Difficulty rules:
  *   - easy:         coverUrl + mcOptions populated; artist NOT exposed
- *   - intermediate: coverUrl null; artist exposed (revealed at 15s in UI)
+ *   - intermediate: depends on `revealKind` (see below)
  *   - hard:         coverUrl null; artist NOT exposed
+ *
+ * Intermediate reveal (at 15s in the UI):
+ *   - revealKind 'artist' (playlist/manual origin): `artist` is exposed so
+ *     the client can reveal the artist name; `coverUrl` stays null.
+ *   - revealKind 'cover'  (artist/party/mix origin): the artist is already
+ *     known, so instead `coverUrl` is exposed to reveal the album art;
+ *     `artist` stays null (it is shown separately via `knownArtist`).
  */
 export interface ClientTrack {
   trackId: string
   previewUrl: string
-  /** Easy only. */
+  /** Easy always; Intermediate when revealKind === 'cover'. */
   coverUrl: string | null
-  /** Intermediate only — used by the client timer to reveal at 15s. */
+  /** Intermediate when revealKind === 'artist' — revealed at 15s. */
   artist: string | null
   /** Easy only — 4 strings, shuffled, ordered as displayed. */
   mcOptions: string[] | null
+  /** Intermediate only — what to reveal at 15s. Absent for easy/hard. */
+  revealKind?: 'artist' | 'cover'
 }
+
+/**
+ * Origin of a track pool. Decides the Intermediate reveal mechanic:
+ *   - 'playlist': artist unknown → reveal the artist at 15s.
+ *   - 'artist':   artist known   → reveal the album cover at 15s.
+ * Playlist and manual challenges map to 'playlist'; artist challenges and
+ * all party rounds (including the mix round) map to 'artist'.
+ */
+export type TrackOrigin = 'playlist' | 'artist'
 
 // ---------------------------------------------------------------------
 // /api/session/start
@@ -216,3 +234,112 @@ export interface ApiError {
   code?: string
   details?: unknown
 }
+
+// ---------------------------------------------------------------------
+// Party mode (multiplayer)
+// ---------------------------------------------------------------------
+
+export type PartyStatus = 'lobby' | 'in_progress' | 'finished'
+export type PartyRoundType = 'artist' | 'mix'
+
+/** A party member as exposed to the client (no sensitive data). */
+export interface PartyMemberView {
+  userId: string
+  username: string
+  avatarUrl: string | null
+  artistId: string | null
+  artistName: string | null
+  isReady: boolean
+  turnOrder: number
+  isHost: boolean
+}
+
+/** Current round metadata (no answers — tracks are served per-member). */
+export interface PartyRoundView {
+  roundNumber: number
+  roundType: PartyRoundType
+  artistLabel: string
+  /** Member whose artist this round belongs to (null for mix). */
+  ownerUserId: string | null
+  /** How many members already finished this round. */
+  finishedCount: number
+  totalMembers: number
+}
+
+/** One row of the party leaderboard (accumulated across finished rounds). */
+export interface PartyLeaderboardEntry {
+  userId: string
+  username: string
+  avatarUrl: string | null
+  totalScore: number
+  totalCorrect: number
+  totalDurationMs: number
+  /** Score per round number, e.g. { "1": 230, "2": 0 }. */
+  roundScores: Record<number, number>
+  rank: number
+}
+
+/**
+ * The caller's playable session for the current round, when the party is
+ * in progress and the caller hasn't finished yet. Mirrors the safe payload
+ * of /api/session/start so it can drive GameSession in pre-created mode.
+ */
+export interface PartyMySession {
+  sessionId: string
+  difficulty: Difficulty
+  totalQuestions: number
+  tracks: ClientTrack[]
+  /** Set for artist rounds (artist known); undefined for mix rounds. */
+  knownArtist?: string
+}
+
+/** Full party state returned by GET /api/party/[code]. */
+export interface PartyStateResponse {
+  code: string
+  status: PartyStatus
+  difficulty: Difficulty
+  currentRound: number
+  totalRounds: number
+  hostUserId: string
+  me: { userId: string; isHost: boolean }
+  members: PartyMemberView[]
+  round: PartyRoundView | null
+  /** Present only if status==='in_progress' and the caller hasn't finished. */
+  mySession: PartyMySession | null
+  /** True when the caller already completed the current round. */
+  myRoundDone: boolean
+  leaderboard: PartyLeaderboardEntry[]
+}
+
+// -- Request payloads --------------------------------------------------
+
+export interface PartyCreateRequest {
+  difficulty: Difficulty
+}
+export interface PartyCreateResponse {
+  code: string
+}
+export interface PartyJoinRequest {
+  code: string
+}
+export interface PartyArtistRequest {
+  code: string
+  artistId: string
+  artistName: string
+}
+export interface PartyReadyRequest {
+  code: string
+  ready: boolean
+}
+export interface PartyActionRequest {
+  code: string
+}
+
+// -- Realtime broadcast events (channel `party:<code>`) ----------------
+
+export type PartyBroadcastEvent =
+  | { type: 'lobby_updated' }
+  | { type: 'round_started'; round: number }
+  | { type: 'member_finished'; userId: string; round: number }
+  | { type: 'round_finished'; round: number }
+  | { type: 'party_finished' }

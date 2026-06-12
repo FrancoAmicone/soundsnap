@@ -3,9 +3,15 @@
 // =====================================================================
 // SoundSnap — IntermediateQuestion
 // =====================================================================
-// Intermediate difficulty: no album cover, free-text input for the
-// song TITLE only. The artist name is revealed at 15s remaining
-// (client-side only, no API call, no scoring penalty).
+// Intermediate difficulty: free-text input for the song TITLE only.
+// A hint is revealed at 15s remaining (client-side only, no API call,
+// no scoring penalty). What the hint is depends on track.revealKind:
+//
+//   'artist' (playlist/manual origin): the artist name is hidden until
+//             15s, then revealed.
+//   'cover'  (artist/party/mix origin): the artist is already known
+//             (shown up top when `knownArtist` is set), so instead the
+//             album COVER is hidden until 15s, then revealed.
 // =====================================================================
 
 import { useState, useEffect, useRef } from 'react'
@@ -14,18 +20,18 @@ import type { ClientTrack } from '@/types'
 interface IntermediateQuestionProps {
   track: ClientTrack
   startedAt: number
-  /** Passed down from Timer: when timeLeft drops to 15 this becomes true. */
-  artistRevealed: boolean
-  onAnswer: (userTitle: string, timeTakenMs: number, artistRevealed: boolean) => void
+  /** Becomes true when the timer drops to 15s. */
+  revealed: boolean
+  onAnswer: (userTitle: string, timeTakenMs: number, hintShown: boolean) => void
   disabled?: boolean
-  /** Pre-known artist (artist-type challenge). Show immediately, skip countdown. */
+  /** Pre-known artist (artist-type challenge / party round). Shown up front. */
   knownArtist?: string
 }
 
 export default function IntermediateQuestion({
   track,
   startedAt,
-  artistRevealed,
+  revealed,
   onAnswer,
   disabled = false,
   knownArtist,
@@ -34,8 +40,10 @@ export default function IntermediateQuestion({
   const [submitted, setSubmitted] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // When the artist is known up front, it's always "revealed"
-  const isRevealed = knownArtist != null || artistRevealed
+  const revealKind = track.revealKind ?? 'artist'
+  // A hint counts as "shown" once the cover/artist is revealed, or when the
+  // artist was known from the start. Sent to the server for analytics only.
+  const hintShown = knownArtist != null || revealed
   const displayArtist = knownArtist ?? track.artist
 
   useEffect(() => {
@@ -47,30 +55,63 @@ export default function IntermediateQuestion({
     if (disabled || submitted || !value.trim()) return
     setSubmitted(true)
     const timeTakenMs = Date.now() - startedAt
-    onAnswer(value.trim(), timeTakenMs, isRevealed)
+    onAnswer(value.trim(), timeTakenMs, hintShown)
   }
 
   return (
     <div className="w-full max-w-sm space-y-5">
-      {/* Artist reveal banner */}
-      <div
-        className={`rounded-xl border px-4 py-3 text-center text-sm transition-all duration-500 ${
-          isRevealed
-            ? 'border-amber-500/40 bg-amber-500/10 text-amber-300'
-            : 'border-white/5 bg-white/[.02] text-white/20'
-        }`}
-      >
-        {isRevealed ? (
-          <>
-            <span className="mr-1 text-xs font-semibold uppercase tracking-widest text-amber-400/70">
-              Artista
-            </span>
-            <span className="font-semibold">{displayArtist}</span>
-          </>
-        ) : (
-          <span>El artista se revela a los 15&nbsp;s</span>
-        )}
-      </div>
+      {/* Known artist (party / artist challenge): always shown up top */}
+      {knownArtist ? (
+        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-center text-sm text-amber-300">
+          <span className="mr-1 text-xs font-semibold uppercase tracking-widest text-amber-400/70">
+            Artista
+          </span>
+          <span className="font-semibold">{knownArtist}</span>
+        </div>
+      ) : null}
+
+      {/* Hint block: artist reveal (playlist) OR cover reveal (artist/mix) */}
+      {revealKind === 'artist' && !knownArtist ? (
+        <div
+          className={`rounded-xl border px-4 py-3 text-center text-sm transition-all duration-500 ${
+            revealed
+              ? 'border-amber-500/40 bg-amber-500/10 text-amber-300'
+              : 'border-white/5 bg-white/[.02] text-white/20'
+          }`}
+        >
+          {revealed ? (
+            <>
+              <span className="mr-1 text-xs font-semibold uppercase tracking-widest text-amber-400/70">
+                Artista
+              </span>
+              <span className="font-semibold">{displayArtist}</span>
+            </>
+          ) : (
+            <span>El artista se revela a los 15&nbsp;s</span>
+          )}
+        </div>
+      ) : null}
+
+      {revealKind === 'cover' ? (
+        <div className="flex flex-col items-center gap-2">
+          <div className="relative h-32 w-32 overflow-hidden rounded-xl border border-white/10 bg-white/[.03]">
+            {revealed && track.coverUrl ? (
+              <img
+                src={track.coverUrl}
+                alt="Portada del álbum"
+                className="h-full w-full object-cover transition-opacity duration-500"
+              />
+            ) : (
+              <div className="flex h-full w-full flex-col items-center justify-center gap-1 px-2 text-center">
+                <span className="text-2xl opacity-20">♪</span>
+                <span className="text-[10px] leading-tight text-white/25">
+                  La portada se revela a los 15&nbsp;s
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
 
       {/* Title input */}
       <form onSubmit={handleSubmit} className="space-y-3">

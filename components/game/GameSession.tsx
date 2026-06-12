@@ -57,6 +57,19 @@ interface GameSessionProps {
    * Hard mode hides the artist field; Intermediate shows it immediately.
    */
   knownArtist?: string
+  /**
+   * Pre-created mode (party rounds): the session already exists server-side
+   * and the safe track payload is supplied directly, so GameSession skips
+   * the /api/session/start call.
+   */
+  initialSessionId?: string
+  initialTracks?: ClientTrack[]
+  initialTotalQuestions?: number
+  /**
+   * When provided, on completion GameSession calls this instead of showing
+   * the single-player summary (party mode shows a shared results screen).
+   */
+  onComplete?: (result: SessionCompleteResponse) => void
 }
 
 type Phase =
@@ -64,6 +77,7 @@ type Phase =
   | { kind: 'playing'; trackIndex: number; startedAt: number }
   | { kind: 'feedback'; trackIndex: number; answer: AnswerResponse }
   | { kind: 'complete'; result: SessionCompleteResponse }
+  | { kind: 'submitted' }
   | { kind: 'error'; message: string }
 
 // -----------------------------------------------------------------------
@@ -93,6 +107,10 @@ export default function GameSession({
   artistName,
   isLoggedIn = false,
   knownArtist,
+  initialSessionId,
+  initialTracks,
+  initialTotalQuestions,
+  onComplete,
 }: GameSessionProps) {
   const router = useRouter()
 
@@ -110,6 +128,15 @@ export default function GameSession({
   useEffect(() => {
     if (sessionStarted.current) return
     sessionStarted.current = true
+
+    // Pre-created mode (party): session already exists, tracks supplied.
+    if (initialSessionId && initialTracks) {
+      setSessionId(initialSessionId)
+      setTracks(initialTracks)
+      setTotalQuestions(initialTotalQuestions ?? initialTracks.length)
+      setPhase({ kind: 'playing', trackIndex: 0, startedAt: Date.now() })
+      return
+    }
 
     async function startSession() {
       if (!challengeId && !artistId) {
@@ -301,7 +328,13 @@ export default function GameSession({
       })
       const data: SessionCompleteResponse & { error?: string } = await res.json()
       if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`)
-      setPhase({ kind: 'complete', result: data })
+      if (onComplete) {
+        // Party mode: hand off to the parent (shared results screen).
+        onComplete(data)
+        setPhase({ kind: 'submitted' })
+      } else {
+        setPhase({ kind: 'complete', result: data })
+      }
     } catch {
       setPhase({
         kind: 'error',
@@ -333,6 +366,17 @@ export default function GameSession({
         >
           ← Volver
         </button>
+      </div>
+    )
+  }
+
+  if (phase.kind === 'submitted') {
+    return (
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-4 text-center">
+        <div className="text-4xl">✓</div>
+        <p className="text-white">¡Terminaste la ronda!</p>
+        <p className="text-sm text-white/40">Esperando a los demás jugadores…</p>
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-white/10 border-t-indigo-400" />
       </div>
     )
   }
@@ -428,7 +472,7 @@ export default function GameSession({
           <IntermediateQuestion
             track={track}
             startedAt={startedAt}
-            artistRevealed={artistRevealed}
+            revealed={artistRevealed}
             onAnswer={handleIntermediateAnswer}
             disabled={submitting}
             knownArtist={knownArtist}

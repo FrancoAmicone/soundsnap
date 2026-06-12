@@ -79,6 +79,14 @@ export default async function HomePage() {
         <p className="mt-2 text-sm text-white/50 sm:mt-3 sm:text-lg">
           Escuchá 5 segundos. Adiviná la canción.
         </p>
+        <div className="mt-5 flex justify-center">
+          <Link
+            href="/party"
+            className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-500"
+          >
+            🎉 Jugar en Party (multijugador)
+          </Link>
+        </div>
       </section>
 
       {/* ── Challenge grid ─────────────────────────────────────────── */}
